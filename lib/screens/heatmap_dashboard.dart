@@ -228,7 +228,7 @@ class HeatmapDashboard extends StatelessWidget {
                   children: [
                     Container(
                       width: 8, height: 8,
-                      decoration: BoxDecoration(color: urgencyColor, shape: BoxShape.circle, boxShadow: [Shadow(color: urgencyColor, blurRadius: 5).toBoxShadow()]),
+                      decoration: BoxDecoration(color: urgencyColor, shape: BoxShape.circle, boxShadow: [BoxShadow(color: urgencyColor, blurRadius: 5)]),
                     ),
                     const SizedBox(width: 8),
                     Text(location, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
