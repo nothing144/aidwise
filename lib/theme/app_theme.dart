@@ -2,46 +2,45 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // Colors
-  static const Color primary = Color(0xFF2563EB); // Deep Blue
-  static const Color primaryContainer = Color(0xFF004AC6); // Darker Blue for gradients
-  static const Color secondary = Color(0xFF14B8A6); // Teal
-  static const Color accent = Color(0xFF7C3AED); // Purple
+  // Colors for Cyber-Humanitarian Dark Mode
+  static const Color primary = Color(0xFF00E5FF); // Cyber Cyan
+  static const Color secondary = Color(0xFFD500F9); // Neon Purple/Magenta
   
-  static const Color background = Color(0xFFF9FAFB); // Light Gray
-  static const Color surface = Color(0xFFFFFFFF); // Cards White
-  static const Color surfaceLow = Color(0xFFF3F4F5); // Low surface
+  static const Color background = Color(0xFF0A0A0A); // Obsidian Black
+  static const Color surface = Color(0xFF1A1A1A); // Anthracite
+  static const Color surfaceLow = Color(0xFF141414); // Slightly darker surface
   
-  static const Color textPrimary = Color(0xFF191C1D);
-  static const Color textSecondary = Color(0xFF434655);
+  static const Color textPrimary = Color(0xFFFFFFFF);
+  static const Color textSecondary = Color(0xFFB3B3B3);
 
   // Urgency
-  static const Color urgencyHigh = Color(0xFFEF4444); // Red
-  static const Color urgencyMedium = Color(0xFFF59E0B); // Orange
-  static const Color urgencyLow = Color(0xFF22C55E); // Green
+  static const Color urgencyHigh = Color(0xFFFF1744); // Neon Red
+  static const Color urgencyMedium = Color(0xFFFF9100); // Neon Orange
+  static const Color urgencyLow = Color(0xFF00E676); // Neon Green
 
-  static ThemeData get lightTheme {
+  static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
+      brightness: Brightness.dark,
       scaffoldBackgroundColor: background,
       primaryColor: primary,
-      colorScheme: ColorScheme.light(
+      colorScheme: const ColorScheme.dark(
         primary: primary,
         secondary: secondary,
         surface: surface,
       ),
       textTheme: TextTheme(
-        displayLarge: GoogleFonts.manrope(
+        displayLarge: GoogleFonts.spaceGrotesk(
             fontSize: 48, fontWeight: FontWeight.bold, color: textPrimary, letterSpacing: -1.0),
-        displayMedium: GoogleFonts.manrope(
+        displayMedium: GoogleFonts.spaceGrotesk(
             fontSize: 36, fontWeight: FontWeight.w700, color: textPrimary, letterSpacing: -0.5),
-        headlineLarge: GoogleFonts.manrope(
+        headlineLarge: GoogleFonts.spaceGrotesk(
             fontSize: 32, fontWeight: FontWeight.w700, color: textPrimary, letterSpacing: -0.5),
-        headlineMedium: GoogleFonts.manrope(
+        headlineMedium: GoogleFonts.spaceGrotesk(
             fontSize: 28, fontWeight: FontWeight.w700, color: textPrimary),
-        titleLarge: GoogleFonts.inter(
+        titleLarge: GoogleFonts.spaceGrotesk(
             fontSize: 22, fontWeight: FontWeight.w600, color: textPrimary),
-        titleMedium: GoogleFonts.inter(
+        titleMedium: GoogleFonts.spaceGrotesk(
             fontSize: 16, fontWeight: FontWeight.w600, color: textPrimary),
         bodyLarge: GoogleFonts.inter(
             fontSize: 16, fontWeight: FontWeight.w400, color: textSecondary),
@@ -57,17 +56,34 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFF2A2A2A), width: 1),
         ),
       ),
     );
   }
 
-  // Soft ambient shadow
-  static List<BoxShadow> get ambientShadow => [
+  // Neon Glow Shadows
+  static List<BoxShadow> get cyanGlow => [
         BoxShadow(
-          color: primary.withOpacity(0.06),
-          blurRadius: 32,
-          offset: const Offset(0, 12),
+          color: primary.withValues(alpha: 0.3),
+          blurRadius: 20,
+          spreadRadius: 2,
+        )
+      ];
+      
+  static List<BoxShadow> get purpleGlow => [
+        BoxShadow(
+          color: secondary.withValues(alpha: 0.2),
+          blurRadius: 24,
+          spreadRadius: 1,
+        )
+      ];
+      
+  static List<BoxShadow> get glassmorphismShadow => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.4),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
         )
       ];
 }
