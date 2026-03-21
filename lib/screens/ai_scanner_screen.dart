@@ -87,7 +87,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
                 const Spacer(),
                 if (_isExtracting) _buildExtractionPanel(),
                 if (_showSuccess) _buildSuccessOverlay(),
-                if (!_isScanning && !_isExtracting && !_showSuccess) _buildScanButton(),
+                if (!_isScanning && !_isExtracting && !_showSuccess) _buildInputMethods(),
               ],
             ),
           )
@@ -179,29 +179,65 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildScanButton() {
+  Widget _buildInputMethods() {
     return Padding(
-      padding: const EdgeInsets.all(32.0),
-      child: GestureDetector(
-        onTap: _startScan,
-        child: Container(
-          width: 80, height: 80,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: AppTheme.primary, width: 4),
-            color: AppTheme.primary.withValues(alpha: 0.2),
-            boxShadow: AppTheme.cyanGlow,
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          // File Upload Button
+          GestureDetector(
+            onTap: _startScan, // Simulates file analyzing
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: AppTheme.surface, shape: BoxShape.circle, border: Border.all(color: AppTheme.surfaceLow)),
+                  child: const Icon(Icons.upload_file, color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 8),
+                Text('Upload File', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+              ],
+            ),
           ),
-          child: Center(
+          
+          // Main Camera Scan Button
+          GestureDetector(
+            onTap: _startScan,
             child: Container(
-              width: 60, height: 60,
+              width: 80, height: 80,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppTheme.primary,
+                border: Border.all(color: AppTheme.primary, width: 4),
+                color: AppTheme.primary.withValues(alpha: 0.2),
+                boxShadow: AppTheme.cyanGlow,
+              ),
+              child: Center(
+                child: Container(
+                  width: 60, height: 60,
+                  decoration: const BoxDecoration(shape: BoxShape.circle, color: AppTheme.primary),
+                  child: const Icon(Icons.camera_alt, color: Colors.black, size: 30),
+                ),
               ),
             ),
           ),
-        ),
+
+          // Manual Form Button
+          GestureDetector(
+            onTap: _startScan, // Simulates manual form flow jumping to extraction verify
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: AppTheme.surface, shape: BoxShape.circle, border: Border.all(color: AppTheme.surfaceLow)),
+                  child: const Icon(Icons.edit_document, color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 8),
+                Text('Manual Entry', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

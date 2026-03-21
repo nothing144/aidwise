@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'heatmap_dashboard.dart';
 import 'ai_scanner_screen.dart';
-import 'volunteer_terminal.dart';
+import 'volunteer_onboarding_screen.dart';
 
 class DemoLauncher extends StatelessWidget {
   const DemoLauncher({super.key});
@@ -69,7 +69,7 @@ class DemoLauncher extends StatelessWidget {
                 subtitle: 'Execute AI Missions',
                 icon: Icons.person_pin,
                 color: AppTheme.urgencyLow,
-                targetScreen: const VolunteerTerminalScreen(),
+                targetScreen: const VolunteerOnboardingScreen(),
               ),
             ],
           ),

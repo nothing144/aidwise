@@ -8,43 +8,25 @@ class VolunteerTerminalScreen extends StatefulWidget {
   State<VolunteerTerminalScreen> createState() => _VolunteerTerminalScreenState();
 }
 
-class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> with SingleTickerProviderStateMixin {
-  bool _missionReceived = false;
+class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
   bool _missionAccepted = false;
-  late AnimationController _pulseController;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 1));
-    
-    // Simulate receiving a mission after 3 seconds of being "On Duty"
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _missionReceived = true;
-        });
-        _pulseController.repeat(reverse: true);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
 
   void _acceptMission() {
     setState(() {
       _missionAccepted = true;
     });
-    _pulseController.stop();
 
-    // Show success and auto close demo
+    // Show success and drop them back to dashboard
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
-        Navigator.pop(context); // Return to role selector
+        Navigator.pop(context); // Return to Dashboard
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.primary,
+            content: const Text('MISSION STARTED! Navigate safely.', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            behavior: SnackBarBehavior.floating,
+          )
+        );
       }
     });
   }
@@ -54,44 +36,13 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> with 
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('FIELD TERMINAL', style: TextStyle(fontSize: 14, letterSpacing: 2, fontWeight: FontWeight.w800, color: Colors.white)),
+        title: const Text('PRIORITY MISSION', style: TextStyle(fontSize: 14, letterSpacing: 2, fontWeight: FontWeight.w800, color: Colors.white)),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: !_missionReceived 
-          ? _buildIdleState()
-          : (_missionAccepted ? _buildSuccessState() : _buildActiveMissionState()),
-    );
-  }
-
-  Widget _buildIdleState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppTheme.primary.withValues(alpha: 0.1),
-              boxShadow: AppTheme.cyanGlow,
-            ),
-            child: const Icon(Icons.radar, color: AppTheme.primary, size: 64),
-          ),
-          const SizedBox(height: 32),
-          Text('ON DUTY', style: TextStyle(
-            color: AppTheme.textPrimary, 
-            fontSize: 24, 
-            fontWeight: FontWeight.bold, 
-            letterSpacing: 4,
-            shadows: [Shadow(color: AppTheme.primary.withValues(alpha: 0.5), blurRadius: 10)]
-          )),
-          const SizedBox(height: 8),
-          Text('Awaiting AI Dispatch...', style: TextStyle(color: AppTheme.textSecondary)),
-        ],
-      ),
+      body: _missionAccepted ? _buildSuccessState() : _buildActiveMissionState(),
     );
   }
 
@@ -101,38 +52,25 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> with 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AnimatedBuilder(
-            animation: _pulseController,
-            builder: (context, child) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.urgencyHigh.withValues(alpha: 0.1),
-                  border: Border.all(
-                    color: AppTheme.urgencyHigh.withValues(alpha: 0.5 + (_pulseController.value * 0.5)),
-                    width: 2,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.urgencyHigh.withValues(alpha: _pulseController.value * 0.3),
-                      blurRadius: 20,
-                    )
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.priority_high, color: AppTheme.urgencyHigh, size: 20),
-                    const SizedBox(width: 8),
-                    Text('URGENT MISSION DISPATCHED', style: TextStyle(
-                      color: AppTheme.urgencyHigh, fontWeight: FontWeight.w900,
-                      letterSpacing: 1.5,
-                      shadows: [Shadow(color: AppTheme.urgencyHigh.withValues(alpha: 0.8), blurRadius: 10)],
-                    )),
-                  ],
-                ),
-              );
-            }
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.urgencyHigh.withValues(alpha: 0.1),
+              border: Border.all(color: AppTheme.urgencyHigh.withValues(alpha: 0.8), width: 2),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [BoxShadow(color: AppTheme.urgencyHigh.withValues(alpha: 0.3), blurRadius: 20)],
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.priority_high, color: AppTheme.urgencyHigh, size: 20),
+                const SizedBox(width: 8),
+                Text('CRITICAL NEED', style: TextStyle(
+                  color: AppTheme.urgencyHigh, fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                  shadows: [Shadow(color: AppTheme.urgencyHigh.withValues(alpha: 0.8), blurRadius: 10)],
+                )),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           const Text('Deliver 50 Blankets', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, height: 1.1)),
@@ -177,6 +115,15 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> with 
                    right: 20, bottom: 20,
                    child: Icon(Icons.location_on, color: AppTheme.urgencyHigh, size: 32),
                  ),
+                 Align(
+                   alignment: Alignment.bottomCenter,
+                   child: Container(
+                     margin: const EdgeInsets.only(bottom: 12),
+                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                     decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(20)),
+                     child: const Text('Show Route', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
+                   ),
+                 )
               ],
             ),
           ),
@@ -209,7 +156,6 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> with 
   }
 
   Widget _buildSwipeToAccept() {
-    // A gamified accepting button
     return GestureDetector(
       onPanUpdate: (details) {
         if (details.delta.dx > 10) {
