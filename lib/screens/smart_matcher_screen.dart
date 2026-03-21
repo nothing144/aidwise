@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 
 class SmartMatcherScreen extends StatefulWidget {
-  const SmartMatcherScreen({super.key});
+  final String? reportId;
+  const SmartMatcherScreen({super.key, this.reportId});
 
   @override
   State<SmartMatcherScreen> createState() => _SmartMatcherScreenState();
@@ -11,13 +13,47 @@ class SmartMatcherScreen extends StatefulWidget {
 class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
   bool _isDispatching = false;
 
-  void _dispatch() {
+  void _dispatch() async {
     setState(() {
       _isDispatching = true;
     });
 
-    // Simulate Network Request
-    Future.delayed(const Duration(seconds: 2), () {
+    try {
+      // 1. Find a Volunteer
+      final volunteers = await FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Volunteer').limit(1).get();
+      if (volunteers.docs.isEmpty) {
+        throw Exception('No registered volunteers found! Please create a Volunteer account first.');
+      }
+      final volunteerId = volunteers.docs.first.id;
+
+      // 2. Fetch the actual report data
+      String location = 'Downtown Shelter';
+      String need = 'General Need';
+      if (widget.reportId != null) {
+        final reportDoc = await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).get();
+        if (reportDoc.exists) {
+          location = reportDoc.data()?['location'] ?? location;
+          need = reportDoc.data()?['type'] ?? need;
+        }
+      }
+
+      // 3. Create the Mission
+      await FirebaseFirestore.instance.collection('missions').add({
+        'title': 'AI Dispatched: $need',
+        'location': location,
+        'assignedVolunteerId': volunteerId,
+        'status': 'Pending',
+        'reportId': widget.reportId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // 4. Update Report status so it clears from Heatmap
+      if (widget.reportId != null) {
+        await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).update({
+          'status': 'Assigned'
+        });
+      }
+
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -29,7 +65,12 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
           ),
         );
       }
-    });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isDispatching = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Dispatch Failed: $e'), backgroundColor: Colors.red));
+      }
+    }
   }
 
   @override

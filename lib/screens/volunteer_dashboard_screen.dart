@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'volunteer_terminal.dart';
 import '../services/auth_service.dart';
 
@@ -47,32 +49,80 @@ class VolunteerDashboardScreen extends StatelessWidget {
             const Text('AI PRIORITIZED FOR YOU', style: TextStyle(color: AppTheme.urgencyHigh, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
             const SizedBox(height: 16),
             
-            _buildMissionCard(
-              context: context,
-              title: 'Deliver 50 Blankets',
-              location: 'Downtown Shelter',
-              distance: '1.2km away',
-              urgencyInfo: 'Critical Priority (AI Assigned)',
-              color: AppTheme.urgencyHigh,
-              onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const VolunteerTerminalScreen()));
-              }
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('missions')
+                  .where('assignedVolunteerId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                  .where('status', isEqualTo: 'Pending')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const CircularProgressIndicator(color: AppTheme.primary);
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24.0),
+                    child: Text('Standby... awaiting AI dispatch.', style: TextStyle(color: AppTheme.textSecondary, fontStyle: FontStyle.italic)),
+                  );
+                }
+
+                return Column(
+                  children: snapshot.data!.docs.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: _buildMissionCard(
+                        context: context,
+                        title: data['title'] ?? 'Priority Mission',
+                        location: data['location'] ?? 'Unknown Location',
+                        distance: 'AI Assigned',
+                        urgencyInfo: 'Critical Priority',
+                        color: AppTheme.urgencyHigh,
+                        onTap: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const VolunteerTerminalScreen()));
+                        }
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
             ),
             
             const SizedBox(height: 32),
-            const Text('OPEN MISSIONS NEARBY', style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+            const Text('OPEN MISSIONS NEARBY (POOL)', style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
             const SizedBox(height: 16),
             
-            _buildMissionCard(
-              context: context,
-              title: 'Medical Supply Transport',
-              location: 'Eastside Clinic',
-              distance: '3.4km away',
-              urgencyInfo: 'Medium Priority',
-              color: AppTheme.urgencyMedium,
-              onTap: () {
-                // In a real app, this would pass completely different data to the terminal
-              }
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('missions')
+                  .where('status', isEqualTo: 'Open')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox();
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Text('No open missions at this time.', style: TextStyle(color: AppTheme.textSecondary));
+                }
+
+                return Column(
+                  children: snapshot.data!.docs.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: _buildMissionCard(
+                        context: context,
+                        title: data['title'] ?? 'Open Task',
+                        location: data['location'] ?? 'Unknown Location',
+                        distance: 'Nearby',
+                        urgencyInfo: 'Medium Priority',
+                        color: AppTheme.urgencyMedium,
+                        onTap: () {}
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
             ),
           ],
         ),

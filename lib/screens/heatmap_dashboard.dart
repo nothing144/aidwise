@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'ai_scanner_screen.dart';
 import 'smart_matcher_screen.dart';
 import '../services/auth_service.dart';
@@ -202,19 +203,48 @@ class HeatmapDashboard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          _buildHotspotRow(context, 'Downtown Shelter', 'Medical & Blankets', '98%', AppTheme.urgencyHigh),
-          const SizedBox(height: 16),
-          _buildHotspotRow(context, 'Eastside Clinic', 'Logistics Support', '85%', AppTheme.urgencyMedium),
-          const SizedBox(height: 48), // Padding for FAB
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('reports').where('status', isEqualTo: 'Open').snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+              }
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24.0),
+                  child: Text('No active hotspots detected.', style: TextStyle(color: AppTheme.textSecondary, fontStyle: FontStyle.italic)),
+                );
+              }
+              return Column(
+                children: snapshot.data!.docs.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  String urgencyStr = data['urgency'] ?? 'Medium';
+                  Color uColor = urgencyStr == 'High' ? AppTheme.urgencyHigh : AppTheme.urgencyMedium;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0),
+                    child: _buildHotspotRow(
+                      context, 
+                      data['location'] ?? 'Unknown Location', 
+                      data['type'] ?? 'General Need', 
+                      '98%', // Mock AI confidence
+                      uColor,
+                      doc.id
+                    ),
+                  );
+                }).toList(),
+              );
+            }
+          ),
+          const SizedBox(height: 24), // Padding for FAB
         ],
       ),
     );
   }
 
-  Widget _buildHotspotRow(BuildContext context, String location, String need, String confidence, Color urgencyColor) {
+  Widget _buildHotspotRow(BuildContext context, String location, String need, String confidence, Color urgencyColor, String reportId) {
     return GestureDetector(
       onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const SmartMatcherScreen()));
+        Navigator.push(context, MaterialPageRoute(builder: (_) => SmartMatcherScreen(reportId: reportId)));
       },
       child: Container(
         padding: const EdgeInsets.all(16),

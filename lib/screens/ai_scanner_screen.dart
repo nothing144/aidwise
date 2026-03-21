@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 
@@ -45,11 +46,23 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
     });
   }
 
-  void _confirmAndDispatch() {
+  void _confirmAndDispatch() async {
     setState(() {
       _isExtracting = false;
       _showSuccess = true;
     });
+
+    try {
+      await FirebaseFirestore.instance.collection('reports').add({
+        'type': 'Medical & Blankets',
+        'location': 'Sector 4 Shelter',
+        'urgency': 'High',
+        'status': 'Open',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Error saving report: $e');
+    }
 
     // Reset after success
     Future.delayed(const Duration(seconds: 2), () {
@@ -103,10 +116,14 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () => AuthService().signOut(),
-          ),
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            )
+          else
+            const SizedBox(width: 48), // Spacer to balance the layout
+
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
@@ -127,7 +144,10 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
               ],
             ),
           ),
-          const SizedBox(width: 48), // balance
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white),
+            onPressed: () => AuthService().signOut(),
+          ),
         ],
       ),
     );
