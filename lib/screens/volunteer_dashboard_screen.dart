@@ -79,7 +79,14 @@ class VolunteerDashboardScreen extends StatelessWidget {
                         urgencyInfo: 'Critical Priority',
                         color: AppTheme.urgencyHigh,
                         onTap: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => const VolunteerTerminalScreen()));
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => VolunteerTerminalScreen(
+                            missionId: doc.id,
+                            title: data['title'] ?? 'Priority Mission',
+                            location: data['location'] ?? 'Unknown Location',
+                            latitude: data['latitude']?.toDouble() ?? 28.6139,
+                            longitude: data['longitude']?.toDouble() ?? 77.2090,
+                            reportId: data['reportId'],
+                          )));
                         }
                       ),
                     );

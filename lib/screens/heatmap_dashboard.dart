@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'ai_scanner_screen.dart';
 import 'smart_matcher_screen.dart';
 import '../services/auth_service.dart';
@@ -46,47 +47,44 @@ class HeatmapDashboard extends StatelessWidget {
   }
 
   Widget _buildSimulatedMap() {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppTheme.background,
-      ),
-      child: Stack(
-        children: [
-          CustomPaint(
-            size: Size.infinite,
-            painter: GridPainter(),
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('reports').where('status', isEqualTo: 'Open').snapshots(),
+      builder: (context, snapshot) {
+        Set<Marker> markers = {};
+        
+        if (snapshot.hasData) {
+          for (var doc in snapshot.data!.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            if (data.containsKey('latitude') && data.containsKey('longitude')) {
+              String urgency = data['urgency'] ?? 'Medium';
+              markers.add(
+                Marker(
+                  markerId: MarkerId(doc.id),
+                  position: LatLng(data['latitude'], data['longitude']),
+                  infoWindow: InfoWindow(
+                    title: data['location'] ?? 'Incident Zone',
+                    snippet: data['type'] ?? 'Needs assessment',
+                  ),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                    urgency == 'High' ? BitmapDescriptor.hueRed : BitmapDescriptor.hueOrange
+                  )
+                )
+              );
+            }
+          }
+        }
+
+        return GoogleMap(
+          initialCameraPosition: const CameraPosition(
+            target: LatLng(28.6139, 77.2090), // Default generic center
+            zoom: 12,
           ),
-          // Fake Heat zones
-          Positioned(
-            top: 200,
-            left: 100,
-            child: Container(
-              width: 150,
-              height: 150,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [AppTheme.urgencyHigh.withValues(alpha: 0.6), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 350,
-            right: 50,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [AppTheme.urgencyMedium.withValues(alpha: 0.4), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+          markers: markers,
+          myLocationEnabled: true,
+          mapType: MapType.normal,
+          zoomControlsEnabled: false,
+        );
+      }
     );
   }
 

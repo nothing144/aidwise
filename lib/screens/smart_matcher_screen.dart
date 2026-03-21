@@ -29,11 +29,16 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
       // 2. Fetch the actual report data
       String location = 'Downtown Shelter';
       String need = 'General Need';
+      double latitude = 28.6139;
+      double longitude = 77.2090;
+
       if (widget.reportId != null) {
         final reportDoc = await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).get();
         if (reportDoc.exists) {
           location = reportDoc.data()?['location'] ?? location;
           need = reportDoc.data()?['type'] ?? need;
+          latitude = reportDoc.data()?['latitude'] ?? latitude;
+          longitude = reportDoc.data()?['longitude'] ?? longitude;
         }
       }
 
@@ -41,6 +46,8 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
       await FirebaseFirestore.instance.collection('missions').add({
         'title': 'AI Dispatched: $need',
         'location': location,
+        'latitude': latitude,
+        'longitude': longitude,
         'assignedVolunteerId': volunteerId,
         'status': 'Pending',
         'reportId': widget.reportId,

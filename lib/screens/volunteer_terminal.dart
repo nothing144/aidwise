@@ -1,8 +1,25 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class VolunteerTerminalScreen extends StatefulWidget {
-  const VolunteerTerminalScreen({super.key});
+  final String missionId;
+  final String title;
+  final String location;
+  final double latitude;
+  final double longitude;
+  final String? reportId;
+
+  const VolunteerTerminalScreen({
+    super.key,
+    required this.missionId,
+    required this.title,
+    required this.location,
+    required this.latitude,
+    required this.longitude,
+    this.reportId,
+  });
 
   @override
   State<VolunteerTerminalScreen> createState() => _VolunteerTerminalScreenState();
@@ -10,25 +27,47 @@ class VolunteerTerminalScreen extends StatefulWidget {
 
 class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
   bool _missionAccepted = false;
+  bool _isCompleting = false;
 
   void _acceptMission() {
     setState(() {
       _missionAccepted = true;
     });
+    // Optional: Could update the mission status to 'Active' or 'In Progress' here if desired.
+  }
 
-    // Show success and drop them back to dashboard
-    Future.delayed(const Duration(seconds: 2), () {
+  void _completeMission() async {
+    setState(() { _isCompleting = true; });
+
+    try {
+      // 1. Mark Mission as Completed
+      await FirebaseFirestore.instance.collection('missions').doc(widget.missionId).update({
+        'status': 'Completed'
+      });
+
+      // 2. Mark Report as Resolved (Removes it from the global heatmap if it wasn't already)
+      if (widget.reportId != null) {
+        await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).update({
+          'status': 'Resolved'
+        });
+      }
+
       if (mounted) {
-        Navigator.pop(context); // Return to Dashboard
+        Navigator.pop(context); // Drop back to dashboard
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.primary,
-            content: const Text('MISSION STARTED! Navigate safely.', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            content: const Text('MISSION ACCOMPLISHED! Excellent work.', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
             behavior: SnackBarBehavior.floating,
           )
         );
       }
-    });
+    } catch (e) {
+      if (mounted) {
+        setState(() { _isCompleting = false; });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      }
+    }
   }
 
   @override
@@ -42,11 +81,11 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: _missionAccepted ? _buildSuccessState() : _buildActiveMissionState(),
+      body: _missionAccepted ? _buildActiveMissionState() : _buildBriefingState(),
     );
   }
 
-  Widget _buildActiveMissionState() {
+  Widget _buildBriefingState() {
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Column(
@@ -61,6 +100,7 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
               boxShadow: [BoxShadow(color: AppTheme.urgencyHigh.withValues(alpha: 0.3), blurRadius: 20)],
             ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.priority_high, color: AppTheme.urgencyHigh, size: 20),
                 const SizedBox(width: 8),
@@ -73,58 +113,36 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          const Text('Deliver 50 Blankets', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, height: 1.1)),
+          Text(widget.title, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, height: 1.1)),
           const SizedBox(height: 8),
-          Text('Downtown Shelter - 1.2km away', style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
+          Text(widget.location, style: const TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
           
           const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.psychology, color: AppTheme.primary),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text('You were selected because you are the only logistics volunteer with a truck within 2 miles.', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 32),
           Container(
             height: 200,
             decoration: BoxDecoration(
               color: AppTheme.surface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.surfaceLow),
+              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3), width: 2),
             ),
-            child: Stack(
-              children: [
-                 Center(child: Icon(Icons.map, size: 64, color: AppTheme.textSecondary.withValues(alpha: 0.2))),
-                 Positioned(
-                   left: 20, top: 20,
-                   child: Icon(Icons.my_location, color: AppTheme.primary),
-                 ),
-                 Positioned(
-                   right: 20, bottom: 20,
-                   child: Icon(Icons.location_on, color: AppTheme.urgencyHigh, size: 32),
-                 ),
-                 Align(
-                   alignment: Alignment.bottomCenter,
-                   child: Container(
-                     margin: const EdgeInsets.only(bottom: 12),
-                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                     decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(20)),
-                     child: const Text('Show Route', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
-                   ),
-                 )
-              ],
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: GoogleMap(
+                initialCameraPosition: CameraPosition(
+                  target: LatLng(widget.latitude, widget.longitude),
+                  zoom: 15,
+                ),
+                markers: {
+                  Marker(
+                    markerId: const MarkerId('target'),
+                    position: LatLng(widget.latitude, widget.longitude),
+                    icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueCyan),
+                  )
+                },
+                mapType: MapType.normal,
+                zoomControlsEnabled: false,
+                myLocationEnabled: true,
+              ),
             ),
           ),
           const Spacer(),
@@ -134,24 +152,68 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
     );
   }
 
-  Widget _buildSuccessState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.check_circle_outline, color: AppTheme.primary, size: 80),
-          const SizedBox(height: 24),
-          Text('MISSION ACCEPTED', style: TextStyle(
-            color: AppTheme.primary, 
-            fontSize: 24, 
-            fontWeight: FontWeight.bold, 
-            letterSpacing: 2,
-            shadows: [Shadow(color: AppTheme.primary.withValues(alpha: 0.5), blurRadius: 10)]
-          )),
-          const SizedBox(height: 8),
-          Text('Navigating to destination...', style: TextStyle(color: AppTheme.textSecondary)),
-        ],
-      ),
+  Widget _buildActiveMissionState() {
+    return Stack(
+      children: [
+        GoogleMap(
+          initialCameraPosition: CameraPosition(
+            target: LatLng(widget.latitude, widget.longitude),
+            zoom: 18,
+          ),
+          markers: {
+            Marker(
+              markerId: const MarkerId('target'),
+              position: LatLng(widget.latitude, widget.longitude),
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+              infoWindow: InfoWindow(title: widget.title, snippet: 'Destination'),
+            )
+          },
+          mapType: MapType.normal,
+          myLocationEnabled: true,
+        ),
+        Positioned(
+          top: 20, left: 20, right: 20,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.surface.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.primary),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('NAVIGATING TO', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                const SizedBox(height: 4),
+                Text(widget.location, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20)),
+              ],
+            ),
+          ),
+        ),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: SizedBox(
+              width: double.infinity,
+              height: 60,
+              child: ElevatedButton.icon(
+                onPressed: _isCompleting ? null : _completeMission,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 10,
+                ),
+                icon: _isCompleting ? const SizedBox() : const Icon(Icons.check_circle, size: 28),
+                label: _isCompleting 
+                  ? const CircularProgressIndicator(color: Colors.black)
+                  : const Text('MISSION ACCOMPLISHED', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 16)),
+              ),
+            ),
+          ),
+        )
+      ],
     );
   }
 
