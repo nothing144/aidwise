@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import 'volunteer_dashboard_screen.dart';
 
 class VolunteerOnboardingScreen extends StatefulWidget {
   const VolunteerOnboardingScreen({super.key});
@@ -14,10 +13,7 @@ class _VolunteerOnboardingScreenState extends State<VolunteerOnboardingScreen> {
   final Set<String> _selectedSkills = {};
 
   void _completeOnboarding() {
-    Navigator.pushReplacement(
-      context, 
-      MaterialPageRoute(builder: (_) => const VolunteerDashboardScreen())
-    );
+    Navigator.pop(context); // Return to root (where AuthWrapper will display the dashboard)
   }
 
   @override

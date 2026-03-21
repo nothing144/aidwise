@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'volunteer_terminal.dart';
+import '../services/auth_service.dart';
 
 class VolunteerDashboardScreen extends StatelessWidget {
   const VolunteerDashboardScreen({super.key});
@@ -15,7 +16,7 @@ class VolunteerDashboardScreen extends StatelessWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          IconButton(icon: const Icon(Icons.person), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.logout), onPressed: () => AuthService().signOut()),
         ],
       ),
       body: SingleChildScrollView(

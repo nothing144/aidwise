@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/auth_service.dart';
 
 class AIScannerScreen extends StatefulWidget {
   const AIScannerScreen({super.key});
@@ -103,8 +104,8 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.logout, color: Colors.white),
+            onPressed: () => AuthService().signOut(),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

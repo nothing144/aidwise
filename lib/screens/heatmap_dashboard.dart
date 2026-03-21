@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'ai_scanner_screen.dart';
 import 'smart_matcher_screen.dart';
+import '../services/auth_service.dart';
 
 class HeatmapDashboard extends StatelessWidget {
   const HeatmapDashboard({super.key});
@@ -124,6 +125,10 @@ class HeatmapDashboard extends StatelessWidget {
                 const Text('SYSTEM ONLINE', style: TextStyle(color: AppTheme.urgencyLow, fontSize: 10, fontWeight: FontWeight.bold)),
               ],
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout, color: AppTheme.textSecondary, size: 20),
+            onPressed: () => AuthService().signOut(),
           )
         ],
       ),
