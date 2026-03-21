@@ -1,8 +1,36 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
-class SmartMatcherScreen extends StatelessWidget {
+class SmartMatcherScreen extends StatefulWidget {
   const SmartMatcherScreen({super.key});
+
+  @override
+  State<SmartMatcherScreen> createState() => _SmartMatcherScreenState();
+}
+
+class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
+  bool _isDispatching = false;
+
+  void _dispatch() {
+    setState(() {
+      _isDispatching = true;
+    });
+
+    // Simulate Network Request
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.urgencyLow,
+            content: const Text('VOLUNTEER DISPATCHED SUCCESSFULLY', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.black)),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,15 +75,19 @@ class SmartMatcherScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('TOP SYNERGY MATCHES', style: TextStyle(
-                    color: AppTheme.primary,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.5,
-                  )),
+                  Row(
+                    children: [
+                      const Icon(Icons.star, color: AppTheme.urgencyMedium, size: 20),
+                      const SizedBox(width: 8),
+                      const Text('#1 OPTIMAL SYNERGY MATCH', style: TextStyle(
+                        color: AppTheme.urgencyMedium,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
+                      )),
+                    ],
+                  ),
                   const SizedBox(height: 16),
-                  _buildVolunteerCard('Alex Johnson', '98.5%', '1.2km away', 'Perfect logistical match with vehicle.'),
-                  const SizedBox(height: 12),
-                  _buildVolunteerCard('Sam Rivera', '94.2%', '3.0km away', 'High medical experience level.'),
+                  _buildVolunteerCard('Sarah Chen', '98.5%', '1.2km away', 'Perfect logistical match with requested vehicle. Available now.'),
                 ],
               ),
             ),
@@ -67,7 +99,7 @@ class SmartMatcherScreen extends StatelessWidget {
         child: SizedBox(
           height: 56,
           child: ElevatedButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: _isDispatching ? null : _dispatch,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
               foregroundColor: Colors.black,
@@ -75,7 +107,9 @@ class SmartMatcherScreen extends StatelessWidget {
               shadowColor: AppTheme.primary.withValues(alpha: 0.5),
               elevation: 10,
             ),
-            child: const Text('DISPATCH SELECTED', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
+            child: _isDispatching 
+                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3))
+                : const Text('DISPATCH VOLUNTEER', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
           ),
         ),
       ),
@@ -89,60 +123,62 @@ class SmartMatcherScreen extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Simulated lines
+          // Simulated connection
           CustomPaint(
             size: const Size(double.infinity, 200),
             painter: NodePainter(),
           ),
-          // Central Node
-          Container(
-            width: 80, height: 80,
-            decoration: BoxDecoration(
-              color: AppTheme.surface,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppTheme.urgencyHigh, width: 3),
-              boxShadow: [BoxShadow(color: AppTheme.urgencyHigh.withValues(alpha: 0.4), blurRadius: 20)],
+          // Central Node (Crisis)
+          Positioned(
+            left: 50,
+            child: Container(
+              width: 80, height: 80,
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.urgencyHigh, width: 3),
+                boxShadow: [BoxShadow(color: AppTheme.urgencyHigh.withValues(alpha: 0.4), blurRadius: 20)],
+              ),
+              child: const Center(child: Icon(Icons.warning, color: AppTheme.urgencyHigh, size: 32)),
             ),
-            child: const Center(child: Icon(Icons.warning, color: AppTheme.urgencyHigh, size: 32)),
           ),
-          // Volunteer Nodes
+          // Volunteer Node (Match)
           Positioned(
-            left: 50, top: 20,
-            child: _buildSmallNode(AppTheme.primary),
+            right: 50,
+            child: Container(
+              width: 80, height: 80,
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.primary, width: 3),
+                boxShadow: [BoxShadow(color: AppTheme.primary.withValues(alpha: 0.4), blurRadius: 20)],
+              ),
+              child: const Center(child: Icon(Icons.person, color: AppTheme.primary, size: 32)),
+            ),
           ),
-          Positioned(
-            right: 60, top: 40,
-            child: _buildSmallNode(AppTheme.primary),
-          ),
-          Positioned(
-            left: 100, bottom: 20,
-            child: _buildSmallNode(AppTheme.primary),
-          ),
+          // Connection Line Anim (Static for now)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.urgencyMedium.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.urgencyMedium.withValues(alpha: 0.5)),
+            ),
+            child: Text('98.5% MATCH', style: TextStyle(color: AppTheme.urgencyMedium, fontWeight: FontWeight.bold, fontSize: 10)),
+          )
         ],
       ),
     );
   }
 
-  Widget _buildSmallNode(Color color) {
-    return Container(
-      width: 48, height: 48,
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceLow,
-        shape: BoxShape.circle,
-        border: Border.all(color: color, width: 2),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 10)],
-      ),
-      child: Center(child: Icon(Icons.person, color: color, size: 24)),
-    );
-  }
-
   Widget _buildVolunteerCard(String name, String match, String distance, String aiReason) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppTheme.surface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.8), width: 2),
+        boxShadow: AppTheme.cyanGlow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,13 +186,13 @@ class SmartMatcherScreen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-              Text(match, style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w900, fontSize: 18)),
+              Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+              Text(match, style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w900, fontSize: 22)),
             ],
           ),
           const SizedBox(height: 4),
-          Text(distance, style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-          const SizedBox(height: 12),
+          Text(distance, style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+          const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -166,9 +202,9 @@ class SmartMatcherScreen extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.psychology, color: AppTheme.secondary, size: 16),
-                const SizedBox(width: 8),
-                Expanded(child: Text(aiReason, style: const TextStyle(color: AppTheme.secondary, fontSize: 12))),
+                const Icon(Icons.psychology, color: AppTheme.secondary, size: 20),
+                const SizedBox(width: 12),
+                Expanded(child: Text(aiReason, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, height: 1.4))),
               ],
             ),
           )
@@ -183,15 +219,11 @@ class NodePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = AppTheme.primary.withValues(alpha: 0.5)
-      ..strokeWidth = 2.0
+      ..strokeWidth = 3.0
       ..style = PaintingStyle.stroke;
 
-    final center = Offset(size.width / 2, size.height / 2);
-    
-    // Draw lines to nodes
-    canvas.drawLine(center, const Offset(74, 44), paint); // To left top
-    canvas.drawLine(center, Offset(size.width - 84, 64), paint); // To right top
-    canvas.drawLine(center, const Offset(124, 180), paint); // To left bottom
+    // Draw straight line between the two nodes
+    canvas.drawLine(Offset(90, size.height / 2), Offset(size.width - 90, size.height / 2), paint); 
   }
 
   @override

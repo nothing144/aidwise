@@ -10,21 +10,14 @@ class AIScannerScreen extends StatefulWidget {
 
 class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
+  bool _isScanning = false;
   bool _isExtracting = false;
+  bool _showSuccess = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
-    
-    // Simulate extraction after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _isExtracting = true;
-        });
-      }
-    });
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
   }
 
   @override
@@ -33,16 +26,50 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
     super.dispose();
   }
 
+  void _startScan() {
+    setState(() {
+      _isScanning = true;
+    });
+    _controller.repeat(reverse: true);
+    
+    // Simulate AI extraction taking 2 seconds
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        _controller.stop();
+        setState(() {
+          _isScanning = false;
+          _isExtracting = true;
+        });
+      }
+    });
+  }
+
+  void _confirmAndDispatch() {
+    setState(() {
+      _isExtracting = false;
+      _showSuccess = true;
+    });
+
+    // Reset after success
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _showSuccess = false;
+        });
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, // true black for camera background
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Simulated Camera Viewfinder
+          // Live Camera Simulation
           Positioned.fill(
             child: Opacity(
-              opacity: 0.5,
+              opacity: _isExtracting || _showSuccess ? 0.3 : 0.8,
               child: Image.network(
                 'https://images.unsplash.com/photo-1607316377884-bbd758c0c8ff?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
                 fit: BoxFit.cover,
@@ -56,9 +83,11 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
               children: [
                 _buildHeader(),
                 const Spacer(),
-                _buildScannerOverlay(),
+                if (_isScanning || (!_isExtracting && !_showSuccess)) _buildScannerOverlay(),
                 const Spacer(),
                 if (_isExtracting) _buildExtractionPanel(),
+                if (_showSuccess) _buildSuccessOverlay(),
+                if (!_isScanning && !_isExtracting && !_showSuccess) _buildScanButton(),
               ],
             ),
           )
@@ -69,12 +98,12 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
-            icon: const Icon(Icons.close, color: Colors.white),
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () => Navigator.pop(context),
           ),
           Container(
@@ -82,12 +111,13 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
             decoration: BoxDecoration(
               color: AppTheme.surface.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
                 const Icon(Icons.auto_awesome, color: AppTheme.primary, size: 16),
                 const SizedBox(width: 8),
-                Text('AI DIGITIZER', style: TextStyle(
+                Text('AI FIELD SCANNER', style: TextStyle(
                   color: AppTheme.primary,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 2,
@@ -105,34 +135,72 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
   Widget _buildScannerOverlay() {
     return Center(
       child: Container(
-        width: 300,
+        width: 320,
         height: 400,
         decoration: BoxDecoration(
-          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.5), width: 2),
+          border: Border.all(
+            color: _isScanning ? AppTheme.primary : AppTheme.primary.withValues(alpha: 0.3), 
+            width: _isScanning ? 2 : 1
+          ),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            return Stack(
-              children: [
-                Positioned(
-                  top: _controller.value * 380,
-                  left: 0,
-                  right: 0,
-                  child: Container(
-                    height: 2,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary,
-                      boxShadow: [
-                        BoxShadow(color: AppTheme.primary.withValues(alpha: 0.8), blurRadius: 10, spreadRadius: 2)
-                      ],
+        child: _isScanning 
+          ? AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                return Stack(
+                  children: [
+                    Positioned(
+                      top: _controller.value * 380,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary,
+                          boxShadow: [
+                            BoxShadow(color: AppTheme.primary, blurRadius: 12, spreadRadius: 4)
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            );
-          },
+                  ],
+                );
+              },
+            )
+          : Center(
+              child: Text('FRAME THE REPORT', style: TextStyle(
+                color: AppTheme.primary.withValues(alpha: 0.5), 
+                letterSpacing: 2,
+                fontWeight: FontWeight.bold
+              )),
+            ),
+      ),
+    );
+  }
+
+  Widget _buildScanButton() {
+    return Padding(
+      padding: const EdgeInsets.all(32.0),
+      child: GestureDetector(
+        onTap: _startScan,
+        child: Container(
+          width: 80, height: 80,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: AppTheme.primary, width: 4),
+            color: AppTheme.primary.withValues(alpha: 0.2),
+            boxShadow: AppTheme.cyanGlow,
+          ),
+          child: Center(
+            child: Container(
+              width: 60, height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.primary,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -152,28 +220,31 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('DATA EXTRACTED', style: TextStyle(color: AppTheme.textSecondary, letterSpacing: 1.5)),
-          const SizedBox(height: 16),
-          _buildExtractedField('Location', 'Downtown Shelter (Zone 4)'),
+          Row(
+            children: [
+              const Icon(Icons.check_circle, color: AppTheme.primary),
+              const SizedBox(width: 8),
+              Text('DATA EXTRACTED SUCCESSFULLY', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildExtractedField('Location', 'Sector 4 Shelter (Coordinates logged)'),
           const SizedBox(height: 12),
           _buildExtractedField('Need', '50 Blankets & 2 Medics'),
           const SizedBox(height: 12),
-          _buildExtractedField('Urgency', 'HIGH (Red)', color: AppTheme.urgencyHigh),
+          _buildExtractedField('Urgency', 'URGENT (AI Triage)', color: AppTheme.urgencyHigh),
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: () {
-                // Confirm action
-                Navigator.pop(context);
-              },
+              onPressed: _confirmAndDispatch,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.secondary,
-                foregroundColor: Colors.white,
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.black,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
-              child: const Text('CONFIRM & DISPATCH AI', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+              child: const Text('PUSH TO COMMAND MAP', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
             ),
           )
         ],
@@ -194,13 +265,35 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
               border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2)),
             ),
             child: Text(value, style: TextStyle(
-              color: color ?? AppTheme.primary,
+              color: color ?? Colors.white,
               fontWeight: FontWeight.bold,
-              shadows: [Shadow(color: (color ?? AppTheme.primary).withValues(alpha: 0.5), blurRadius: 10)]
+              shadows: [if (color != null) Shadow(color: color.withValues(alpha: 0.5), blurRadius: 10)]
             )),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSuccessOverlay() {
+    return Container(
+      margin: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.surface.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppTheme.urgencyLow),
+        boxShadow: [BoxShadow(color: AppTheme.urgencyLow.withValues(alpha: 0.2), blurRadius: 20)],
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.cloud_done, color: AppTheme.urgencyLow, size: 64),
+          const SizedBox(height: 16),
+          Text('REPORT DIGITIZED', style: TextStyle(color: AppTheme.textPrimary, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2)),
+          const SizedBox(height: 8),
+          Text('Pushing to Global Heatmap...', style: TextStyle(color: AppTheme.textSecondary)),
+        ],
+      ),
     );
   }
 }
