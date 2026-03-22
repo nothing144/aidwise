@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -33,7 +34,34 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
     setState(() {
       _missionAccepted = true;
     });
-    // Optional: Could update the mission status to 'Active' or 'In Progress' here if desired.
+  }
+
+  void _declineMission() async {
+    try {
+      // 1. Delete this specific failed mission document to clean up DB
+      await FirebaseFirestore.instance.collection('missions').doc(widget.missionId).delete();
+
+      // 2. Mark the parent Report back to Open so the Admin sees it on the Heatmap again
+      if (widget.reportId != null) {
+        await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).update({
+          'status': 'Open'
+        });
+      }
+
+      if (mounted) {
+        Navigator.pop(context); // Return to Dashboard
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mission Declined.'), backgroundColor: Colors.white24));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  void _openInGoogleMaps() async {
+    final Uri url = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${widget.latitude},${widget.longitude}');
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open Maps APP')));
+    }
   }
 
   void _completeMission() async {
@@ -146,7 +174,16 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
             ),
           ),
           const Spacer(),
-          _buildSwipeToAccept(),
+          Column(
+            children: [
+              _buildSwipeToAccept(),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: _declineMission,
+                child: const Text('DECLINE MISSION', style: TextStyle(color: AppTheme.textSecondary, letterSpacing: 2, fontWeight: FontWeight.bold)),
+              )
+            ],
+          )
         ],
       ),
     );
@@ -194,22 +231,43 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
           alignment: Alignment.bottomCenter,
           child: Padding(
             padding: const EdgeInsets.all(24.0),
-            child: SizedBox(
-              width: double.infinity,
-              height: 60,
-              child: ElevatedButton.icon(
-                onPressed: _isCompleting ? null : _completeMission,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 10,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    onPressed: _openInGoogleMaps,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primary,
+                      side: const BorderSide(color: AppTheme.primary, width: 2),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      backgroundColor: Colors.black54,
+                    ),
+                    icon: const Icon(Icons.navigation),
+                    label: const Text('OPEN IN NATIVE MAPS', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                  ),
                 ),
-                icon: _isCompleting ? const SizedBox() : const Icon(Icons.check_circle, size: 28),
-                label: _isCompleting 
-                  ? const CircularProgressIndicator(color: Colors.black)
-                  : const Text('MISSION ACCOMPLISHED', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 16)),
-              ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 60,
+                  child: ElevatedButton.icon(
+                    onPressed: _isCompleting ? null : _completeMission,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 10,
+                    ),
+                    icon: _isCompleting ? const SizedBox() : const Icon(Icons.check_circle, size: 28),
+                    label: _isCompleting 
+                      ? const CircularProgressIndicator(color: Colors.black)
+                      : const Text('MISSION ACCOMPLISHED', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 16)),
+                  ),
+                ),
+              ],
             ),
           ),
         )

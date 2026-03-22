@@ -61,7 +61,6 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.black),
-              onBuilder: (context, states, child) => child!,
               onPressed: () {
                 if (_manualController.text.trim().isEmpty) return;
                 Navigator.pop(context);
@@ -105,7 +104,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
     });
   }
 
-  void _confirmAndDispatch() async {
+  void _confirmAndDispatch([String? manualText]) async {
     setState(() {
       _isExtracting = false;
       _showSuccess = true;
@@ -130,9 +129,13 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
       Position position = await Geolocator.getCurrentPosition();
 
       // 2. Push to Firestore with GPS Coordinates!
+      String reportType = manualText != null && manualText.isNotEmpty 
+          ? manualText 
+          : 'Emergency Response (Photo Analyzed)';
+
       await FirebaseFirestore.instance.collection('reports').add({
-        'type': 'Medical & Blankets',
-        'location': 'Sector 4 Shelter',
+        'type': reportType,
+        'location': 'Location Logged (GPS)',
         'latitude': position.latitude,
         'longitude': position.longitude,
         'urgency': 'High',
@@ -374,7 +377,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: _confirmAndDispatch,
+              onPressed: () => _confirmAndDispatch(_manualController.text),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
                 foregroundColor: Colors.black,

@@ -62,8 +62,11 @@ class HeatmapDashboard extends StatelessWidget {
                   markerId: MarkerId(doc.id),
                   position: LatLng(data['latitude'], data['longitude']),
                   infoWindow: InfoWindow(
-                    title: data['location'] ?? 'Incident Zone',
-                    snippet: data['type'] ?? 'Needs assessment',
+                    title: data['type'] ?? 'Incident Zone',
+                    snippet: 'Tap here to dispatch Volunteer',
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => SmartMatcherScreen(reportId: doc.id)));
+                    }
                   ),
                   icon: BitmapDescriptor.defaultMarkerWithHue(
                     urgency == 'High' ? BitmapDescriptor.hueRed : BitmapDescriptor.hueOrange
@@ -242,7 +245,11 @@ class HeatmapDashboard extends StatelessWidget {
   Widget _buildHotspotRow(BuildContext context, String location, String need, String confidence, Color urgencyColor, String reportId) {
     return GestureDetector(
       onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => SmartMatcherScreen(reportId: reportId)));
+        Navigator.push(context, MaterialPageRoute(builder: (_) => SmartMatcherScreen(
+          reportId: reportId,
+          location: location,
+          need: need,
+        )));
       },
       child: Container(
         padding: const EdgeInsets.all(16),

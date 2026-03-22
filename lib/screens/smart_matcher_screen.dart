@@ -4,7 +4,15 @@ import '../theme/app_theme.dart';
 
 class SmartMatcherScreen extends StatefulWidget {
   final String? reportId;
-  const SmartMatcherScreen({super.key, this.reportId});
+  final String location;
+  final String need;
+
+  const SmartMatcherScreen({
+    super.key, 
+    this.reportId,
+    this.location = 'Downtown Shelter',
+    this.need = 'General Need',
+  });
 
   @override
   State<SmartMatcherScreen> createState() => _SmartMatcherScreenState();
@@ -105,13 +113,15 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
                 children: [
                   Text('Resolving Critical Hotspot', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
                   const SizedBox(height: 8),
-                  Text('DOWNTOWN SHELTER', style: TextStyle(
+                  Text(widget.need.toUpperCase(), style: TextStyle(
                     color: AppTheme.urgencyHigh, 
-                    fontSize: 28, 
+                    fontSize: 24, 
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 2,
+                    letterSpacing: 1.5,
                     shadows: [Shadow(color: AppTheme.urgencyHigh.withValues(alpha: 0.5), blurRadius: 10)],
-                  )),
+                  ), textAlign: TextAlign.center,),
+                  const SizedBox(height: 4),
+                  Text('at ${widget.location}', style: TextStyle(color: AppTheme.primary, fontSize: 16)),
                 ],
               ),
             ),
