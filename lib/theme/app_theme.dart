@@ -17,6 +17,7 @@ class AppTheme {
   static const Color urgencyHigh = Color(0xFFFF1744); // Neon Red
   static const Color urgencyMedium = Color(0xFFFF9100); // Neon Orange
   static const Color urgencyLow = Color(0xFF00E676); // Neon Green
+  static const Color success = Color(0xFF00E676); // Same as low urgency
 
   static ThemeData get darkTheme {
     return ThemeData(
