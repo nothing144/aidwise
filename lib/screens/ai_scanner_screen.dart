@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 
@@ -16,6 +17,63 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
   bool _isScanning = false;
   bool _isExtracting = false;
   bool _showSuccess = false;
+
+  final ImagePicker _picker = ImagePicker();
+  XFile? _imageFile;
+  final TextEditingController _manualController = TextEditingController();
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(source: source);
+      if (pickedFile != null) {
+        setState(() {
+          _imageFile = pickedFile;
+        });
+        _startScan(); // Autostart scan when image is selected
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  void _showManualEntryDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppTheme.surface,
+          title: const Text('Manual Report', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
+          content: TextField(
+            controller: _manualController,
+            maxLines: 4,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Describe the emergency (e.g. 50 Blankets needed at Downtown)',
+              hintStyle: TextStyle(color: AppTheme.textSecondary),
+              enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: AppTheme.primary.withValues(alpha: 0.3))),
+              focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: AppTheme.primary)),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.black),
+              onBuilder: (context, states, child) => child!,
+              onPressed: () {
+                if (_manualController.text.trim().isEmpty) return;
+                Navigator.pop(context);
+                _startScan(); // Start "AI analysis" of the text
+              },
+              child: const Text('SUBMIT'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -229,7 +287,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
         children: [
           // File Upload Button
           GestureDetector(
-            onTap: _startScan, // Simulates file analyzing
+            onTap: () => _pickImage(ImageSource.gallery), 
             child: Column(
               children: [
                 Container(
@@ -245,7 +303,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
           
           // Main Camera Scan Button
           GestureDetector(
-            onTap: _startScan,
+            onTap: () => _pickImage(ImageSource.camera),
             child: Container(
               width: 80, height: 80,
               decoration: BoxDecoration(
@@ -266,7 +324,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
 
           // Manual Form Button
           GestureDetector(
-            onTap: _startScan, // Simulates manual form flow jumping to extraction verify
+            onTap: _showManualEntryDialog, 
             child: Column(
               children: [
                 Container(
