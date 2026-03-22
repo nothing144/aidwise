@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
-import 'screens/heatmap_dashboard.dart';
+import 'screens/admin_hub_screen.dart';
 import 'screens/ai_scanner_screen.dart';
 import 'screens/volunteer_dashboard_screen.dart';
 import 'services/auth_service.dart';
@@ -53,7 +53,7 @@ class AuthWrapper extends StatelessWidget {
                 return const Scaffold(backgroundColor: AppTheme.background, body: Center(child: CircularProgressIndicator()));
               }
               final role = roleSnapshot.data;
-              if (role == 'Admin / NGO') return const HeatmapDashboard();
+              if (role == 'Admin / NGO') return const AdminHubScreen();
               if (role == 'Field Worker') return const AIScannerScreen();
               if (role == 'Volunteer') return const VolunteerDashboardScreen();
               

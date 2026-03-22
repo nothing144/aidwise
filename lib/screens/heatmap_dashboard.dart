@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'ai_scanner_screen.dart';
 import 'smart_matcher_screen.dart';
 import '../services/auth_service.dart';
 
 class HeatmapDashboard extends StatelessWidget {
-  const HeatmapDashboard({super.key});
+  final bool showAppBar;
+  
+  const HeatmapDashboard({super.key, this.showAppBar = true});
 
   @override
   Widget build(BuildContext context) {
@@ -24,8 +25,8 @@ class HeatmapDashboard extends StatelessWidget {
           SafeArea(
             child: Column(
               children: [
-                _buildTopBar(),
-                const SizedBox(height: 16),
+                if (showAppBar) _buildTopBar(),
+                if (showAppBar) const SizedBox(height: 16),
                 _buildMetricsRow(),
                 const Spacer(),
                 _buildAIPriorityDrawer(context),
@@ -33,15 +34,6 @@ class HeatmapDashboard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const AIScannerScreen()));
-        },
-        backgroundColor: AppTheme.secondary,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.document_scanner),
-        label: const Text('DIGITIZE FIELD REPORT', style: TextStyle(fontWeight: FontWeight.w800)),
       ),
     );
   }

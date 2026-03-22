@@ -1,0 +1,90 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../theme/app_theme.dart';
+import 'ai_scanner_screen.dart';
+import 'smart_matcher_screen.dart';
+
+class AdminReportsTab extends StatelessWidget {
+  const AdminReportsTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const AIScannerScreen(isAdminMode: true)));
+        },
+        backgroundColor: AppTheme.primary,
+        icon: const Icon(Icons.document_scanner, color: Colors.black),
+        label: const Text('DIGITIZE REPORT', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('reports').orderBy('timestamp', descending: true).snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+
+          var reports = snapshot.data!.docs;
+          if (reports.isEmpty) {
+            return const Center(child: Text('No reports in system.', style: TextStyle(color: AppTheme.textSecondary)));
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.only(bottom: 80, top: 16),
+            itemCount: reports.length,
+            itemBuilder: (context, index) {
+              var doc = reports[index];
+              var data = doc.data() as Map<String, dynamic>;
+              bool isOffice = data['source'] == 'Admin Dashboard';
+              bool isOpen = data['status'] == 'Open';
+
+              Color statusColor = isOpen ? AppTheme.urgencyHigh : AppTheme.success;
+
+              return Card(
+                color: AppTheme.surface.withValues(alpha: 0.5),
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: AppTheme.surfaceLow)),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(16),
+                  leading: CircleAvatar(
+                    backgroundColor: isOffice ? AppTheme.secondary.withValues(alpha: 0.2) : AppTheme.primary.withValues(alpha: 0.2),
+                    child: Icon(isOffice ? Icons.business : Icons.gps_fixed, color: isOffice ? AppTheme.secondary : AppTheme.primary),
+                  ),
+                  title: Text(data['type'] ?? 'Emergency', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(data['location'] ?? 'Unknown Location', style: const TextStyle(color: AppTheme.textSecondary)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(width: 8, height: 8, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+                            const SizedBox(width: 4),
+                            Text(data['status']?.toUpperCase() ?? 'UNKNOWN', style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                          ],
+                        )
+                      ],
+                    ),
+                  ),
+                  trailing: isOpen ? OutlinedButton(
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => SmartMatcherScreen(
+                        reportId: doc.id,
+                        location: data['location'] ?? 'Unknown',
+                        need: data['type'] ?? 'Unknown'
+                      )));
+                    },
+                    style: OutlinedButton.styleFrom(side: const BorderSide(color: AppTheme.primary)),
+                    child: const Text('DISPATCH', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
+                  ) : null,
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}

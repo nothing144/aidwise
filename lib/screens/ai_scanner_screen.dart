@@ -4,9 +4,12 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
+import 'admin_location_picker_screen.dart';
 
 class AIScannerScreen extends StatefulWidget {
-  const AIScannerScreen({super.key});
+  final bool isAdminMode;
+  
+  const AIScannerScreen({super.key, this.isAdminMode = false});
 
   @override
   State<AIScannerScreen> createState() => _AIScannerScreenState();
@@ -133,6 +136,15 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
           ? manualText 
           : 'Emergency Response (Photo Analyzed)';
 
+      // Check Admin Mode - Route to Location Picker instead of GPS
+      if (widget.isAdminMode) {
+        if (mounted) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => AdminLocationPickerScreen(reportType: reportType)));
+        }
+        return;
+      }
+
+      // Live Field Worker Mode - Uses GPS
       await FirebaseFirestore.instance.collection('reports').add({
         'type': reportType,
         'location': 'Location Logged (GPS)',
