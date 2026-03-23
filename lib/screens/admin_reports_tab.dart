@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import 'ai_scanner_screen.dart';
-import 'smart_matcher_screen.dart';
+import 'report_detail_map_screen.dart';
 
 class AdminReportsTab extends StatelessWidget {
   const AdminReportsTab({super.key});
@@ -37,48 +37,51 @@ class AdminReportsTab extends StatelessWidget {
               var data = doc.data() as Map<String, dynamic>;
               bool isOffice = data['source'] == 'Admin Dashboard';
               bool isOpen = data['status'] == 'Open';
+              bool hasCoords = data.containsKey('latitude') && data.containsKey('longitude');
 
               Color statusColor = isOpen ? AppTheme.urgencyHigh : AppTheme.success;
 
-              return Card(
-                color: AppTheme.surface.withValues(alpha: 0.5),
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: AppTheme.surfaceLow)),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(16),
-                  leading: CircleAvatar(
-                    backgroundColor: isOffice ? AppTheme.secondary.withValues(alpha: 0.2) : AppTheme.primary.withValues(alpha: 0.2),
-                    child: Icon(isOffice ? Icons.business : Icons.gps_fixed, color: isOffice ? AppTheme.secondary : AppTheme.primary),
-                  ),
-                  title: Text(data['type'] ?? 'Emergency', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(data['location'] ?? 'Unknown Location', style: const TextStyle(color: AppTheme.textSecondary)),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Container(width: 8, height: 8, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
-                            const SizedBox(width: 4),
-                            Text(data['status']?.toUpperCase() ?? 'UNKNOWN', style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
-                          ],
-                        )
-                      ],
+              return GestureDetector(
+                onTap: hasCoords ? () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => ReportDetailMapScreen(
+                    reportId: doc.id,
+                    reportType: data['type'] ?? 'Emergency',
+                    location: data['location'] ?? 'Unknown',
+                    latitude: (data['latitude'] as num).toDouble(),
+                    longitude: (data['longitude'] as num).toDouble(),
+                    urgency: data['urgency'] ?? 'High',
+                  )));
+                } : null,
+                child: Card(
+                  color: AppTheme.surface.withValues(alpha: 0.5),
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: AppTheme.surfaceLow)),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.all(16),
+                    leading: CircleAvatar(
+                      backgroundColor: isOffice ? AppTheme.secondary.withValues(alpha: 0.2) : AppTheme.primary.withValues(alpha: 0.2),
+                      child: Icon(isOffice ? Icons.business : Icons.gps_fixed, color: isOffice ? AppTheme.secondary : AppTheme.primary),
                     ),
+                    title: Text(data['type'] ?? 'Emergency', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(data['location'] ?? 'Unknown Location', style: const TextStyle(color: AppTheme.textSecondary)),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Container(width: 8, height: 8, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+                              const SizedBox(width: 4),
+                              Text(data['status']?.toUpperCase() ?? 'UNKNOWN', style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ],
+                          )
+                        ],
+                      ),
+                    ),
+                    trailing: const Icon(Icons.chevron_right, color: AppTheme.primary),
                   ),
-                  trailing: isOpen ? OutlinedButton(
-                    onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => SmartMatcherScreen(
-                        reportId: doc.id,
-                        location: data['location'] ?? 'Unknown',
-                        need: data['type'] ?? 'Unknown'
-                      )));
-                    },
-                    style: OutlinedButton.styleFrom(side: const BorderSide(color: AppTheme.primary)),
-                    child: const Text('DISPATCH', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
-                  ) : null,
                 ),
               );
             },
