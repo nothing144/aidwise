@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
+import '../services/ai_service.dart';
 
 class SmartMatcherScreen extends StatefulWidget {
   final String? reportId;
@@ -20,23 +21,107 @@ class SmartMatcherScreen extends StatefulWidget {
 
 class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
   bool _isDispatching = false;
+  bool _isAnalyzing = true;
+  int _selectedVolunteerIndex = 0;
+
+  // Ranked volunteer list
+  List<Map<String, dynamic>> _rankedVolunteers = [];
+  Map<String, dynamic> _reportData = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _runAllocationEngine();
+  }
+
+  Future<void> _runAllocationEngine() async {
+    try {
+      // 1. Fetch the incident report data
+      if (widget.reportId != null) {
+        final reportDoc = await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).get();
+        _reportData = reportDoc.data() ?? {'type': widget.need, 'location': widget.location};
+      } else {
+        _reportData = {'type': widget.need, 'location': widget.location};
+      }
+
+      // 2. Fetch ALL available volunteers
+      final volSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'Volunteer')
+          .get();
+
+      if (volSnapshot.docs.isEmpty) {
+        if (mounted) setState(() => _isAnalyzing = false);
+        return;
+      }
+
+      // 3. Compute local scores for each volunteer
+      List<Map<String, dynamic>> scoredVolunteers = [];
+      for (var doc in volSnapshot.docs) {
+        final volData = doc.data();
+        final scores = AIService.computeLocalScore(volData, _reportData);
+        
+        scoredVolunteers.add({
+          'id': doc.id,
+          'data': volData,
+          'scores': scores,
+          'reasoning': 'Computing AI reasoning...',
+        });
+      }
+
+      // 4. Sort by total_score descending (highest first)
+      scoredVolunteers.sort((a, b) => 
+        (b['scores']['total_score'] as int).compareTo(a['scores']['total_score'] as int)
+      );
+
+      // 5. Take Top 3
+      final topCandidates = scoredVolunteers.take(3).toList();
+
+      if (mounted) {
+        setState(() {
+          _rankedVolunteers = topCandidates;
+          _isAnalyzing = false;
+        });
+      }
+
+      // 6. Asynchronously get AI reasoning for each top candidate (non-blocking)
+      for (int i = 0; i < topCandidates.length; i++) {
+        final candidate = topCandidates[i];
+        try {
+          final reasonResult = await AIService.generateMatchReasoning(
+            candidate['data'], _reportData, candidate['scores']
+          );
+          if (mounted) {
+            setState(() {
+              _rankedVolunteers[i]['reasoning'] = reasonResult['reasoning'] ?? 'Good match based on data analysis.';
+            });
+          }
+        } catch (e) {
+          debugPrint("Reasoning error for candidate $i: $e");
+        }
+      }
+
+    } catch(e) {
+      debugPrint("Allocation Engine Error: $e");
+      if (mounted) setState(() => _isAnalyzing = false);
+    }
+  }
 
   void _dispatch() async {
+    if (_rankedVolunteers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No volunteer found!')));
+      return;
+    }
+
+    final selectedVol = _rankedVolunteers[_selectedVolunteerIndex];
+
     setState(() {
       _isDispatching = true;
     });
 
     try {
-      // 1. Find a Volunteer
-      final volunteers = await FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Volunteer').limit(1).get();
-      if (volunteers.docs.isEmpty) {
-        throw Exception('No registered volunteers found! Please create a Volunteer account first.');
-      }
-      final volunteerId = volunteers.docs.first.id;
-
-      // 2. Fetch the actual report data
-      String location = 'Downtown Shelter';
-      String need = 'General Need';
+      String location = widget.location;
+      String need = widget.need;
       double latitude = 28.6139;
       double longitude = 77.2090;
 
@@ -50,19 +135,18 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
         }
       }
 
-      // 3. Create the Mission
       await FirebaseFirestore.instance.collection('missions').add({
         'title': 'AI Dispatched: $need',
         'location': location,
         'latitude': latitude,
         'longitude': longitude,
-        'assignedVolunteerId': volunteerId,
+        'assignedVolunteerId': selectedVol['id'],
         'status': 'Pending',
         'reportId': widget.reportId,
+        'matchScore': selectedVol['scores']['total_score'],
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // 4. Update Report status so it clears from Heatmap
       if (widget.reportId != null) {
         await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).update({
           'status': 'Assigned'
@@ -74,7 +158,8 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.urgencyLow,
-            content: const Text('VOLUNTEER DISPATCHED SUCCESSFULLY', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.black)),
+            content: Text('DISPATCHED ${selectedVol['data']['displayName'] ?? 'VOLUNTEER'} (${selectedVol['scores']['total_score']}% MATCH)', 
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 1, color: Colors.white)),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
@@ -93,7 +178,7 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: Text('AI MATCHING SEQUENCE', style: TextStyle(
+        title: const Text('INTELLIGENT ALLOCATION', style: TextStyle(
           color: AppTheme.textPrimary, 
           fontSize: 14,
           fontWeight: FontWeight.bold,
@@ -107,6 +192,7 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
+            // Incident Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
               child: Column(
@@ -121,13 +207,43 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
                     shadows: [Shadow(color: AppTheme.urgencyHigh.withValues(alpha: 0.5), blurRadius: 10)],
                   ), textAlign: TextAlign.center,),
                   const SizedBox(height: 4),
-                  Text('at ${widget.location}', style: TextStyle(color: AppTheme.primary, fontSize: 16)),
+                  Text('at ${widget.location}', style: const TextStyle(color: AppTheme.primary, fontSize: 16)),
                 ],
               ),
             ),
+
+            // Scoring Factors Legend
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.surface.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('SCORING FACTORS', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.5)),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        _buildFactorChip('Skills', '50%', Colors.cyanAccent),
+                        const SizedBox(width: 8),
+                        _buildFactorChip('Proximity', '30%', Colors.orangeAccent),
+                        const SizedBox(width: 8),
+                        _buildFactorChip('Availability', '20%', Colors.purpleAccent),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             const SizedBox(height: 24),
-            _buildNodeGraph(),
-            const SizedBox(height: 32),
+
+            // Ranked Volunteers
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: Column(
@@ -136,26 +252,56 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('TOP 3 PERFECTLY MATCHED\nVOLUNTEERS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, height: 1.3)),
+                      const Text('TOP RANKED CANDIDATES', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, height: 1.3)),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          border: Border.all(color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+                          color: AppTheme.primary.withValues(alpha: 0.1),
+                          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4)),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Text('AUTO-\nSCAN', style: TextStyle(color: AppTheme.textSecondary, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1), textAlign: TextAlign.center),
+                        child: Text('${_rankedVolunteers.length} FOUND', style: const TextStyle(color: AppTheme.primary, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
                       )
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _buildVolunteerCard('Agent K', '0.8 MILES AWAY', 'MEDICAL EXPERTISE 98%', AppTheme.primary, Icons.person_search),
-                  const SizedBox(height: 12),
-                  _buildVolunteerCard('Unit 704', '1.2 MILES AWAY', 'RAPID RESPONSE CERTIFIED', AppTheme.secondary, Icons.person),
-                  const SizedBox(height: 12),
-                  _buildVolunteerCard('Sarah J', '1.5 MILES AWAY', 'MATCHES REQUIRED LOGISTICS SKILL', AppTheme.urgencyMedium, Icons.groups),
+                  if (_isAnalyzing)
+                    const Center(child: Column(
+                      children: [
+                        CircularProgressIndicator(color: AppTheme.primary),
+                        SizedBox(height: 16),
+                        Text('Running multi-factor analysis...', style: TextStyle(color: AppTheme.textSecondary)),
+                      ],
+                    ))
+                  else if (_rankedVolunteers.isEmpty)
+                    const Text('No volunteers registered in the system.', style: TextStyle(color: Colors.red))
+                  else
+                    ...List.generate(_rankedVolunteers.length, (index) {
+                      final vol = _rankedVolunteers[index];
+                      final scores = vol['scores'] as Map<String, dynamic>;
+                      final data = vol['data'] as Map<String, dynamic>;
+                      final isSelected = index == _selectedVolunteerIndex;
+                      
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedVolunteerIndex = index),
+                        child: _buildRankedVolunteerCard(
+                          rank: index + 1,
+                          name: data['displayName'] ?? 'Agent ${index + 1}',
+                          skills: List<String>.from(data['skills'] ?? []),
+                          vehicle: data['vehicleType'] ?? '',
+                          totalScore: scores['total_score'] as int,
+                          skillScore: scores['skill_score'] as int,
+                          distanceScore: scores['distance_score'] as int,
+                          availabilityScore: scores['availability_score'] as int,
+                          reasoning: vol['reasoning'] ?? '',
+                          isSelected: isSelected,
+                        ),
+                      );
+                    }),
                 ],
               ),
             ),
+            const SizedBox(height: 100), // Space for bottom button
           ],
         ),
       ),
@@ -169,7 +315,7 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: ElevatedButton.icon(
-              onPressed: _isDispatching ? null : _dispatch,
+              onPressed: _isDispatching || _rankedVolunteers.isEmpty ? null : _dispatch,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.transparent,
                 shadowColor: Colors.transparent,
@@ -178,10 +324,14 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
               ),
               icon: _isDispatching 
                   ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3))
-                  : const Icon(Icons.groups, size: 24),
+                  : const Icon(Icons.rocket_launch, size: 24),
               label: _isDispatching 
                   ? const Text('DISPATCHING...')
-                  : const Text('DISPATCH SELECTED VOLUNTEERS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                  : Text(
+                      _rankedVolunteers.isNotEmpty 
+                        ? 'DISPATCH #${_selectedVolunteerIndex + 1} RANKED VOLUNTEER'
+                        : 'NO VOLUNTEERS AVAILABLE',
+                      style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 12)),
             ),
           ),
         ),
@@ -189,106 +339,178 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
     );
   }
 
-  Widget _buildNodeGraph() {
-    return SizedBox(
-      height: 200,
-      width: double.infinity,
-      child: Stack(
-        alignment: Alignment.center,
+  Widget _buildFactorChip(String label, String weight, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          children: [
+            Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+            Text(weight, style: TextStyle(color: color.withValues(alpha: 0.6), fontSize: 9)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRankedVolunteerCard({
+    required int rank,
+    required String name,
+    required List<String> skills,
+    required String vehicle,
+    required int totalScore,
+    required int skillScore,
+    required int distanceScore,
+    required int availabilityScore,
+    required String reasoning,
+    required bool isSelected,
+  }) {
+    Color rankColor = rank == 1 ? Colors.amber : (rank == 2 ? Colors.grey.shade300 : Colors.brown.shade300);
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isSelected 
+          ? AppTheme.primary.withValues(alpha: 0.08)
+          : AppTheme.surface.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSelected ? AppTheme.primary : AppTheme.surfaceLow,
+          width: isSelected ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Simulated connection
-          CustomPaint(
-            size: const Size(double.infinity, 200),
-            painter: NodePainter(),
-          ),
-          // Central Node (Crisis)
-          Positioned(
-            left: 50,
-            child: Container(
-              width: 80, height: 80,
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.urgencyHigh, width: 3),
-                boxShadow: [BoxShadow(color: AppTheme.urgencyHigh.withValues(alpha: 0.4), blurRadius: 20)],
+          // Header Row
+          Row(
+            children: [
+              // Rank Badge
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: rankColor.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: rankColor, width: 2),
+                ),
+                child: Center(child: Text('#$rank', style: TextStyle(color: rankColor, fontWeight: FontWeight.w900, fontSize: 14))),
               ),
-              child: const Center(child: Icon(Icons.warning, color: AppTheme.urgencyHigh, size: 32)),
-            ),
-          ),
-          // Volunteer Node (Match)
-          Positioned(
-            right: 50,
-            child: Container(
-              width: 80, height: 80,
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.primary, width: 3),
-                boxShadow: [BoxShadow(color: AppTheme.primary.withValues(alpha: 0.4), blurRadius: 20)],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                    if (vehicle.isNotEmpty) 
+                      Text('🚗 $vehicle', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  ],
+                ),
               ),
-              child: const Center(child: Icon(Icons.person, color: AppTheme.primary, size: 32)),
-            ),
+              // Total Score
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: totalScore >= 70 
+                      ? [Colors.green.shade800, Colors.green.shade600]
+                      : totalScore >= 40
+                        ? [Colors.orange.shade800, Colors.orange.shade600]
+                        : [Colors.red.shade800, Colors.red.shade600],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('$totalScore%', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+              ),
+            ],
           ),
-          // Connection Line Anim (Static for now)
+
+          const SizedBox(height: 12),
+
+          // Skills Tags
+          if (skills.isNotEmpty)
+            Wrap(
+              spacing: 6, runSpacing: 6,
+              children: skills.map((s) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                ),
+                child: Text(s, style: const TextStyle(color: AppTheme.primary, fontSize: 10, fontWeight: FontWeight.bold)),
+              )).toList(),
+            ),
+
+          const SizedBox(height: 12),
+
+          // Score Breakdown Bars
+          _buildScoreBar('SKILL MATCH', skillScore, Colors.cyanAccent),
+          const SizedBox(height: 6),
+          _buildScoreBar('PROXIMITY', distanceScore, Colors.orangeAccent),
+          const SizedBox(height: 6),
+          _buildScoreBar('AVAILABILITY', availabilityScore, Colors.purpleAccent),
+
+          const SizedBox(height: 12),
+
+          // AI Reasoning
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppTheme.urgencyMedium.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.urgencyMedium.withValues(alpha: 0.5)),
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Text('98.5% MATCH', style: TextStyle(color: AppTheme.urgencyMedium, fontWeight: FontWeight.bold, fontSize: 10)),
-          )
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.auto_awesome, color: AppTheme.secondary, size: 14),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(reasoning, style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontStyle: FontStyle.italic)),
+                ),
+              ],
+            ),
+          ),
+
+          if (isSelected)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: AppTheme.primary, size: 16),
+                  const SizedBox(width: 6),
+                  const Text('SELECTED FOR DISPATCH', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)),
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildVolunteerCard(String name, String distance, String skill, Color skillColor, IconData avatarIcon) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: AppTheme.stitchCardWithLeftBorder(skillColor),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: skillColor.withValues(alpha: 0.2),
-            radius: 24,
-            child: Icon(avatarIcon, color: skillColor, size: 24),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text(distance, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: skillColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: skillColor.withValues(alpha: 0.4)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.star, color: skillColor, size: 12),
-                      const SizedBox(width: 4),
-                      Text(skill, style: TextStyle(color: skillColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                    ],
-                  ),
-                )
-              ],
+  Widget _buildScoreBar(String label, int score, Color color) {
+    return Row(
+      children: [
+        SizedBox(width: 90, child: Text(label, style: TextStyle(color: AppTheme.textSecondary, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5))),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: score / 100.0,
+              backgroundColor: color.withValues(alpha: 0.1),
+              valueColor: AlwaysStoppedAnimation(color),
+              minHeight: 6,
             ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 8),
+        Text('$score%', style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+      ],
     );
   }
 }
@@ -301,7 +523,6 @@ class NodePainter extends CustomPainter {
       ..strokeWidth = 3.0
       ..style = PaintingStyle.stroke;
 
-    // Draw straight line between the two nodes
     canvas.drawLine(Offset(90, size.height / 2), Offset(size.width - 90, size.height / 2), paint); 
   }
 

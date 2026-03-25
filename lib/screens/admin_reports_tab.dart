@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
@@ -54,14 +55,18 @@ class AdminReportsTab extends StatelessWidget {
                     location: data['location'] ?? 'Unknown',
                     latitude: (data['latitude'] as num).toDouble(),
                     longitude: (data['longitude'] as num).toDouble(),
-                    urgency: data['urgency'] ?? 'High',
+                  urgency: data['urgency'] ?? 'High',
                   )));
                 } : null,
-                child: Card(
-                  color: AppTheme.surface.withValues(alpha: 0.5),
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: AppTheme.surfaceLow)),
-                  child: ListTile(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+                      child: Container(
+                        decoration: AppTheme.stitchCard,
+                        child: ListTile(
                     contentPadding: const EdgeInsets.all(16),
                     leading: CircleAvatar(
                       backgroundColor: isOffice ? AppTheme.secondary.withValues(alpha: 0.2) : AppTheme.primary.withValues(alpha: 0.2),
@@ -88,7 +93,7 @@ class AdminReportsTab extends StatelessWidget {
                     trailing: const Icon(Icons.chevron_right, color: AppTheme.primary),
                   ),
                 ),
-              );
+              ))));
             },
           );
         },

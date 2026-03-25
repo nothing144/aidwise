@@ -22,8 +22,8 @@ class AuthService {
         'fullName': fullName,
         'createdAt': FieldValue.serverTimestamp(),
         'status': 'Idle',
-      }).timeout(const Duration(seconds: 10), onTimeout: () {
-        throw Exception('Database connection timed out. Is Cloud Firestore created in Test Mode?');
+      }).timeout(const Duration(seconds: 20), onTimeout: () {
+        throw Exception('Database connection timed out. Please check your internet connection and ensure Firestore is in Test Mode.');
       });
       return null; // Success
     } on FirebaseAuthException catch (e) {
@@ -54,11 +54,18 @@ class AuthService {
     final user = _auth.currentUser;
     if (user == null) return null;
 
-    final doc = await _firestore.collection('users').doc(user.uid).get();
-    if (doc.exists) {
-      return doc.data()?['role'] as String?;
+    try {
+      final doc = await _firestore.collection('users').doc(user.uid).get()
+          .timeout(const Duration(seconds: 15), onTimeout: () {
+        throw Exception('Firestore read timed out');
+      });
+      if (doc.exists) {
+        return doc.data()?['role'] as String?;
+      }
+      return null;
+    } catch (e) {
+      rethrow; // Let AuthWrapper handle the error UI
     }
-    return null;
   }
 
   // Sign Out

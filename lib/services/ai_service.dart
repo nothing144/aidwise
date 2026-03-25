@@ -1,0 +1,212 @@
+import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
+import 'package:google_generative_ai/google_generative_ai.dart';
+
+class AIService {
+  // Master Switch: false = 0 cost/fast testing, true = real Gemini API calls
+  static const bool isLiveMode = true; 
+
+  static const String _apiKey = ""; 
+
+  // ─────────────────────────── SKILL TAXONOMY ───────────────────────────
+  // Maps report "type" keywords to relevant volunteer skills.
+  // This acts as a lightweight "feature vector" for local ML scoring.
+  static const Map<String, List<String>> _skillRelevanceMap = {
+    'medical':     ['Medical Provider', 'Blood Donor', 'Counselling'],
+    'blood':       ['Blood Donor', 'Medical Provider'],
+    'education':   ['Teacher / Tutor', 'IT Support', 'Counselling'],
+    'food':        ['Food Distribution', 'Logistics & Transport'],
+    'logistics':   ['Logistics & Transport', 'Food Distribution'],
+    'search':      ['Search & Rescue', 'Logistics & Transport'],
+    'fire':        ['Search & Rescue', 'Logistics & Transport'],
+    'rescue':      ['Search & Rescue', 'Medical Provider'],
+    'counselling': ['Counselling', 'Teacher / Tutor'],
+    'it':          ['IT Support', 'Teacher / Tutor'],
+  };
+
+  // ─────────────────────── FIELD REPORT ANALYZER ───────────────────────
+  static Future<Map<String, dynamic>> analyzeFieldReport({String? textInput, Uint8List? imageBytes}) async {
+    if (!isLiveMode) {
+      await Future.delayed(const Duration(seconds: 1));
+      return { 
+        "urgency": "High", 
+        "type": "Blood Required", 
+        "location": "Detected from text" 
+      };
+    }
+    
+    try {
+      final model = GenerativeModel(
+        model: 'gemini-1.5-flash', 
+        apiKey: _apiKey,
+        generationConfig: GenerationConfig(responseMimeType: 'application/json')
+      );
+      
+      final promptString = 'Analyze this NGO field incident report. If there is an image, describe the emergency visible. If there is text, use it too. Text provided: "${textInput ?? 'None'}". Return a strict JSON object with: 1) "urgency" (Low/Medium/High/Critical), 2) "type" (Short 2-word need type, e.g. "Medical Need", "Blood Required", "Education Support", "Food Drive", "Logistics Help", "Search Rescue", "Fire Hazard"), 3) "location" (Extracted location, or "Unknown").';
+      
+      late GenerateContentResponse response;
+      if (imageBytes != null) {
+        final imagePart = DataPart('image/jpeg', imageBytes);
+        response = await model.generateContent([
+          Content.multi([TextPart(promptString), imagePart])
+        ]);
+      } else {
+        response = await model.generateContent([
+          Content.text(promptString)
+        ]);
+      }
+      return jsonDecode(response.text!);
+    } catch (e) {
+      print("Gemini API Error: $e");
+      return { 
+        "urgency": "Medium", 
+        "type": "General Incident", 
+        "location": "Unknown Error" 
+      };
+    }
+  }
+
+  // ───────── MULTI-FACTOR SCORING ENGINE (Local ML-style) ─────────
+  /// Computes a weighted composite score for a single volunteer against a report.
+  /// Returns a Map with individual factor scores + total.
+  static Map<String, dynamic> computeLocalScore(
+    Map<String, dynamic> volunteer,
+    Map<String, dynamic> report,
+  ) {
+    double skillScore = _computeSkillScore(volunteer, report);
+    double distanceScore = _computeDistanceScore(volunteer, report);
+    double availabilityScore = _computeAvailabilityScore(volunteer);
+
+    // Weighted combination (Skills most important for hackathon context)
+    // Skills: 50%, Distance: 30%, Availability: 20%
+    double totalScore = (skillScore * 0.50) + (distanceScore * 0.30) + (availabilityScore * 0.20);
+
+    return {
+      'skill_score': (skillScore * 100).round(),
+      'distance_score': (distanceScore * 100).round(),
+      'availability_score': (availabilityScore * 100).round(),
+      'total_score': (totalScore * 100).round(),
+    };
+  }
+
+  /// Skill Matching: Checks how many of the volunteer's skills are relevant to the report type.
+  static double _computeSkillScore(Map<String, dynamic> volunteer, Map<String, dynamic> report) {
+    List<String> volSkills = List<String>.from(volunteer['skills'] ?? []);
+    if (volSkills.isEmpty) return 0.2; // Some base score even if no skills entered
+
+    String reportType = (report['type'] ?? '').toString().toLowerCase();
+
+    // Find the best matching skill category
+    List<String> relevantSkills = [];
+    for (var key in _skillRelevanceMap.keys) {
+      if (reportType.contains(key)) {
+        relevantSkills.addAll(_skillRelevanceMap[key]!);
+      }
+    }
+    if (relevantSkills.isEmpty) return 0.4; // Neutral if report type is unknown
+
+    // Count how many of the volunteer's skills match
+    int matchCount = volSkills.where((s) => relevantSkills.contains(s)).length;
+    return min(1.0, matchCount / max(1, relevantSkills.toSet().length) + 0.3); // 0.3 base
+  }
+
+  /// Distance Scoring: Uses Haversine formula for actual geographic distance.
+  static double _computeDistanceScore(Map<String, dynamic> volunteer, Map<String, dynamic> report) {
+    double? volLat = _toDouble(volunteer['latitude']);
+    double? volLng = _toDouble(volunteer['longitude']);
+    double? repLat = _toDouble(report['latitude']);
+    double? repLng = _toDouble(report['longitude']);
+
+    if (volLat == null || volLng == null || repLat == null || repLng == null) {
+      return 0.5; // Neutral if location data is missing
+    }
+
+    double distKm = _haversine(volLat, volLng, repLat, repLng);
+    // Scoring: < 5km = 1.0, 5-20km = 0.7, 20-50km = 0.4, > 50km = 0.2
+    if (distKm < 5) return 1.0;
+    if (distKm < 20) return 0.7;
+    if (distKm < 50) return 0.4;
+    return 0.2;
+  }
+
+  /// Availability: Checks if volunteer has the vehicle to respond quickly.
+  static double _computeAvailabilityScore(Map<String, dynamic> volunteer) {
+    String vehicle = (volunteer['vehicleType'] ?? '').toString().toLowerCase().trim();
+    // Has a vehicle = higher availability score
+    if (vehicle.contains('truck') || vehicle.contains('van') || vehicle.contains('ambulance')) return 1.0;
+    if (vehicle.contains('car') || vehicle.contains('bike') || vehicle.contains('motorcycle')) return 0.8;
+    if (vehicle.isNotEmpty) return 0.6;
+    return 0.3; // No vehicle
+  }
+
+  /// Haversine formula to calculate distance between two lat/lng points in km
+  static double _haversine(double lat1, double lon1, double lat2, double lon2) {
+    const R = 6371.0; // Earth radius in km
+    double dLat = _deg2rad(lat2 - lat1);
+    double dLon = _deg2rad(lon2 - lon1);
+    double a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(_deg2rad(lat1)) * cos(_deg2rad(lat2)) * sin(dLon / 2) * sin(dLon / 2);
+    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return R * c;
+  }
+
+  static double _deg2rad(double deg) => deg * (pi / 180);
+
+  static double? _toDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  // ─────────── GEMINI AI REASONING (for Top Candidates) ───────────
+  /// Generates a human-readable reasoning sentence for why this volunteer is a good/bad match.
+  static Future<Map<String, dynamic>> generateMatchReasoning(
+    Map<String, dynamic> volunteer,
+    Map<String, dynamic> report,
+    Map<String, dynamic> localScores,
+  ) async {
+    if (!isLiveMode) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      return { 
+        "reasoning": "Strong skill overlap with ${report['type']}. Vehicle available for rapid deployment."
+      };
+    }
+    
+    try {
+      final model = GenerativeModel(
+        model: 'gemini-1.5-flash', 
+        apiKey: _apiKey,
+        generationConfig: GenerationConfig(responseMimeType: 'application/json')
+      );
+      
+      final prompt = '''You are an intelligent resource allocation engine for NGOs.
+Given the following data, explain in 1 concise sentence WHY this volunteer is suitable for this task.
+
+Volunteer: Name=${volunteer['displayName']}, Skills=${volunteer['skills']}, Vehicle=${volunteer['vehicleType']}
+Incident Report: Type=${report['type']}, Urgency=${report['urgency']}, Location=${report['location']}
+Pre-computed Scores: SkillMatch=${localScores['skill_score']}%, Proximity=${localScores['distance_score']}%, Availability=${localScores['availability_score']}%
+
+Return JSON: {"reasoning": "1 short professional sentence"}''';
+      
+      final response = await model.generateContent([Content.text(prompt)]);
+      return jsonDecode(response.text!);
+    } catch (e) {
+      print("Gemini Reasoning Error: $e");
+      return { 
+        "reasoning": "Matched based on skill relevance (${localScores['skill_score']}%) and proximity (${localScores['distance_score']}%)."
+      };
+    }
+  }
+
+  // ─────────── LEGACY: Simple Synergy (kept for backward compat) ───────────
+  static Future<Map<String, dynamic>> calculateSynergy(Map<String, dynamic> volunteer, Map<String, dynamic> report) async {
+    final scores = computeLocalScore(volunteer, report);
+    final reasoning = await generateMatchReasoning(volunteer, report, scores);
+    return {
+      'match_percentage': scores['total_score'],
+      'reasoning': reasoning['reasoning'],
+    };
+  }
+}

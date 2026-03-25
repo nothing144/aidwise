@@ -29,8 +29,36 @@ class VolunteerTerminalScreen extends StatefulWidget {
 class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
   bool _missionAccepted = false;
   bool _isCompleting = false;
+  String _reportUrgency = 'HIGH';
+  String _reportType = 'GENERAL';
+  int _impactXP = 300;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadReportDetails();
+  }
 
+  Future<void> _loadReportDetails() async {
+    if (widget.reportId != null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).get();
+        if (doc.exists && mounted) {
+          final data = doc.data()!;
+          String urg = (data['urgency'] ?? 'High').toString().toUpperCase();
+          String type = (data['type'] ?? 'General').toString().toUpperCase();
+          int xp = urg == 'CRITICAL' ? 500 : (urg == 'HIGH' ? 300 : (urg == 'MEDIUM' ? 150 : 50));
+          setState(() {
+            _reportUrgency = urg;
+            _reportType = type;
+            _impactXP = xp;
+          });
+        }
+      } catch (e) {
+        debugPrint('Error loading report details: $e');
+      }
+    }
+  }
 
   void _declineMission() async {
     try {
@@ -160,21 +188,21 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(border: Border.all(color: AppTheme.textSecondary.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(4)),
-                      child: const Text('PRIORITY HIGH', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                      decoration: BoxDecoration(border: Border.all(color: _reportUrgency == 'CRITICAL' ? AppTheme.urgencyHigh : AppTheme.textSecondary.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(4)),
+                      child: Text('PRIORITY $_reportUrgency', style: TextStyle(color: _reportUrgency == 'CRITICAL' || _reportUrgency == 'HIGH' ? AppTheme.urgencyHigh : Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(border: Border.all(color: AppTheme.textSecondary.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(4)),
-                      child: const Text('LOGISTICS', style: TextStyle(color: AppTheme.textSecondary, fontSize: 9, fontWeight: FontWeight.bold)),
+                      child: Text(_reportType, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Text('Dispatch to ${widget.location}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                Text('Field report from ground team. Logistics required for immediate distribution.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, height: 1.4)),
+                Text('AI-matched task requiring $_reportType response at this location.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, height: 1.4)),
               ],
             ),
           ),
@@ -216,9 +244,9 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('TIME REMAINING', style: TextStyle(color: AppTheme.textSecondary, fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.bold)),
+                      Text('PRIORITY', style: TextStyle(color: AppTheme.textSecondary, fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      const Text('00:42:15', style: TextStyle(color: AppTheme.primary, fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(_reportUrgency, style: TextStyle(color: _reportUrgency == 'CRITICAL' ? AppTheme.urgencyHigh : AppTheme.primary, fontSize: 18, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -233,7 +261,7 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
                     children: [
                       Text('IMPACT XP', style: TextStyle(color: AppTheme.textSecondary, fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      const Text('+850 UNIT', style: TextStyle(color: AppTheme.secondary, fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text('+$_impactXP UNIT', style: const TextStyle(color: AppTheme.secondary, fontSize: 18, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),

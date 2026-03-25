@@ -32,15 +32,31 @@ class VolunteerDashboardScreen extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Hello, Volunteer', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser?.uid).snapshots(),
+                      builder: (ctx, snap) {
+                        String name = snap.data?.get('displayName') ?? 'Volunteer';
+                        return Text('Hello, $name', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white));
+                      },
+                    ),
                     const SizedBox(height: 4),
                     Text('Status: ON DUTY', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, shadows: [Shadow(color: AppTheme.primary.withValues(alpha: 0.5), blurRadius: 10)])),
                   ],
                 ),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.2), shape: BoxShape.circle, border: Border.all(color: AppTheme.primary)),
-                  child: const Text('98', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 20)),
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('missions')
+                      .where('assignedVolunteerId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                      .where('status', isEqualTo: 'Completed')
+                      .snapshots(),
+                  builder: (ctx, snap) {
+                    int completedCount = snap.data?.docs.length ?? 0;
+                    int impactXP = completedCount * 100;
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: AppTheme.primary.withValues(alpha: 0.2), shape: BoxShape.circle, border: Border.all(color: AppTheme.primary)),
+                      child: Text('$impactXP', style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 16)),
+                    );
+                  },
                 ),
               ],
             ),

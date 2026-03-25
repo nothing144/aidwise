@@ -16,8 +16,7 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
   int _currentIndex = 0;
 
   final List<Widget> _pages = [
-    const HeatmapDashboard(showAppBar: false), // Map Tab
-    const AdminReportsTab(),
+    const MergedInboxTab(),
     const AdminMissionsTab(),
   ];
 
@@ -52,9 +51,10 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
       ),
       body: _pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: AppTheme.background, // Match obsidian
         selectedItemColor: AppTheme.primary,
         unselectedItemColor: AppTheme.textSecondary,
+        elevation: 20,
         currentIndex: _currentIndex,
         onTap: (index) {
           setState(() {
@@ -62,9 +62,44 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
           });
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Live Map'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: 'Report Inbox'),
-          BottomNavigationBarItem(icon: Icon(Icons.assignment_turned_in), label: 'Missions'),
+          BottomNavigationBarItem(icon: Icon(Icons.all_inbox), label: 'Inboxes'),
+          BottomNavigationBarItem(icon: Icon(Icons.rocket_launch), label: 'Missions'),
+        ],
+      ),
+    );
+  }
+}
+
+class MergedInboxTab extends StatelessWidget {
+  const MergedInboxTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          TabBar(
+            indicatorColor: AppTheme.primary,
+            labelColor: AppTheme.primary,
+            unselectedLabelColor: AppTheme.textSecondary,
+            dividerColor: Colors.transparent,
+            indicatorWeight: 3,
+            labelStyle: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            tabs: const [
+              Tab(text: 'AI FIELD REPORTS'),
+              Tab(text: 'OFFICE MANUAL'),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Expanded(
+            child: TabBarView(
+              children: [
+                HeatmapDashboard(showAppBar: false),
+                AdminReportsTab(),
+              ],
+            ),
+          ),
         ],
       ),
     );

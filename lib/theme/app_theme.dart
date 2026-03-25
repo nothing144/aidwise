@@ -2,34 +2,39 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // Colors for Cyber-Humanitarian Dark Mode
-  static const Color primary = Color(0xFF00E5FF); // Cyber Cyan
-  static const Color secondary = Color(0xFFD500F9); // Neon Purple/Magenta
+  // Colors for Aegis Zero (Stitch) Dark Mode
+  static const Color primary = Color(0xFF00FFFF); // Electric Cyan
+  static const Color secondary = Color(0xFFFF00FF); // Neon Magenta
   
-  static const Color background = Color(0xFF0A0A0A); // Obsidian Black
-  static const Color surface = Color(0xFF1A1A1A); // Anthracite
-  static const Color surfaceLow = Color(0xFF141414); // Slightly darker surface
+  static const Color background = Color(0xFF131314); // Obsidian
+  static const Color surface = Color(0xFF1C1B1C); // Surface Container Low
+  static const Color surfaceLow = Color(0xFF0E0E0F); // Surface Container Lowest
   
   static const Color textPrimary = Color(0xFFFFFFFF);
-  static const Color textSecondary = Color(0xFFB3B3B3);
+  static const Color textSecondary = Color(0xFFB9CAC9); // On Surface Variant
 
   // Urgency
-  static const Color urgencyHigh = Color(0xFFFF1744); // Neon Red
-  static const Color urgencyMedium = Color(0xFFFF9100); // Neon Orange
-  static const Color urgencyLow = Color(0xFF00E676); // Neon Green
-  static const Color success = Color(0xFF00E676);
+  static const Color urgencyHigh = Color(0xFFFFB4AB); // Error light
+  static const Color urgencyMedium = Color(0xFFFCE442); // Tertiary Fixed
+  static const Color urgencyLow = Color(0xFF00FBFB); // Primary Container
+  static const Color success = Color(0xFF00FBFB);
 
-  // Stitch-style Gradients
+  // Aegis Zero Gradients
   static const LinearGradient cyanMagentaGradient = LinearGradient(
-    colors: [Color(0xFF00E5FF), Color(0xFFD500F9)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF00FFFF), Color(0xFFFF00FF)],
   );
 
   static const LinearGradient cyanMagentaGradientSubtle = LinearGradient(
-    colors: [Color(0xFF003844), Color(0xFF2A0040)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF003737), Color(0xFF380038)],
   );
 
   // Card Surface (slightly lifted from background)
-  static const Color cardSurface = Color(0xFF111318);
+  static const Color cardSurface = Color(0xFF2A2A2B); // Surface Container High
+  static const Color outlineVariant = Color(0xFF3A4A49);
 
   static ThemeData get darkTheme {
     return ThemeData(
@@ -78,38 +83,45 @@ class AppTheme {
   // Neon Glow Shadows
   static List<BoxShadow> get cyanGlow => [
         BoxShadow(
-          color: primary.withValues(alpha: 0.3),
-          blurRadius: 20,
+          color: primary.withValues(alpha: 0.2), // primary glow
+          blurRadius: 16,
           spreadRadius: 2,
         )
       ];
       
   static List<BoxShadow> get purpleGlow => [
         BoxShadow(
-          color: secondary.withValues(alpha: 0.2),
-          blurRadius: 24,
+          color: secondary.withValues(alpha: 0.15),
+          blurRadius: 20,
           spreadRadius: 1,
         )
       ];
       
   static List<BoxShadow> get glassmorphismShadow => [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.4),
-          blurRadius: 12,
-          offset: const Offset(0, 4),
+          color: const Color(0xFF00DDDD).withValues(alpha: 0.08), // Toned Cyan Ambient Shadow
+          blurRadius: 40,
+          offset: const Offset(0, 0),
         )
       ];
 
-  // Stitch-style Helpers
+  // Aegis Zero Helpers
   static BoxDecoration get stitchCard => BoxDecoration(
-    color: cardSurface,
+    color: cardSurface.withValues(alpha: 0.6), // 60% opacity for glass effect
     borderRadius: BorderRadius.circular(12),
-    border: Border.all(color: const Color(0xFF1E2A35), width: 1),
+    border: Border.all(color: outlineVariant.withValues(alpha: 0.1), width: 1), // Ghostly 10% border
+    boxShadow: glassmorphismShadow,
   );
 
   static BoxDecoration stitchCardWithLeftBorder(Color color) => BoxDecoration(
-    color: cardSurface,
+    color: cardSurface.withValues(alpha: 0.6),
     borderRadius: BorderRadius.circular(12),
-    border: Border(left: BorderSide(color: color, width: 3), top: BorderSide(color: const Color(0xFF1E2A35)), right: BorderSide(color: const Color(0xFF1E2A35)), bottom: BorderSide(color: const Color(0xFF1E2A35))),
+    border: Border(
+      left: BorderSide(color: color, width: 3), 
+      top: BorderSide(color: outlineVariant.withValues(alpha: 0.1)), 
+      right: BorderSide(color: outlineVariant.withValues(alpha: 0.1)), 
+      bottom: BorderSide(color: outlineVariant.withValues(alpha: 0.1))
+    ),
+    boxShadow: glassmorphismShadow,
   );
 }

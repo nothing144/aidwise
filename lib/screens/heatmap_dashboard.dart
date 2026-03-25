@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -81,11 +82,20 @@ class HeatmapDashboard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Row(
         children: [
-          Expanded(child: _buildMetricCard('Unprocessed\nReports', '12', AppTheme.secondary)),
+          Expanded(child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('reports').where('status', isEqualTo: 'Open').snapshots(),
+            builder: (ctx, snap) => _buildMetricCard('Unprocessed\nReports', '${snap.data?.docs.length ?? 0}', AppTheme.secondary),
+          )),
           const SizedBox(width: 12),
-          Expanded(child: _buildMetricCard('Critical\nHotspots', '3', AppTheme.urgencyHigh)),
+          Expanded(child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('reports').where('status', isEqualTo: 'Open').where('urgency', whereIn: ['High', 'Critical']).snapshots(),
+            builder: (ctx, snap) => _buildMetricCard('Critical\nHotspots', '${snap.data?.docs.length ?? 0}', AppTheme.urgencyHigh),
+          )),
           const SizedBox(width: 12),
-          Expanded(child: _buildMetricCard('Active\nVolunteers', '84', AppTheme.primary)),
+          Expanded(child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Volunteer').snapshots(),
+            builder: (ctx, snap) => _buildMetricCard('Active\nVolunteers', '${snap.data?.docs.length ?? 0}', AppTheme.primary),
+          )),
         ],
       ),
     );
@@ -151,7 +161,7 @@ class HeatmapDashboard extends StatelessWidget {
                 }
                 
                 var allDocs = snapshot.data?.docs ?? [];
-                // ONLY show Field Worker reports (not Admin Dashboard reports)
+                // ONLY show Field Worker reports
                 var fieldDocs = allDocs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   return data['source'] != 'Admin Dashboard';
@@ -162,24 +172,75 @@ class HeatmapDashboard extends StatelessWidget {
                     child: Text('No active field hotspots detected.', style: TextStyle(color: AppTheme.textSecondary)),
                   );
                 }
+
+                // Group by location string to create "Clusters"
+                Map<String, List<QueryDocumentSnapshot>> groupedDocs = {};
+                for (var doc in fieldDocs) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  String loc = data['location'] ?? 'Unknown Location';
+                  
+                  // For GPS coordinates, we truncate slightly so near points cluster together, 
+                  // or just group by the exact string if it's a named place/village.
+                  // E.g., 'GPS: 28.61, 77.20'
+                  if (loc.startsWith('GPS:')) {
+                     List<String> parts = loc.replaceAll('GPS:', '').split(',');
+                     if (parts.length == 2) {
+                        double? lat = double.tryParse(parts[0]);
+                        double? lng = double.tryParse(parts[1]);
+                        if (lat != null && lng != null) {
+                           // Truncate to 2 decimal places implies ~1km clustering radius
+                           loc = 'Area Sector: ${lat.toStringAsFixed(2)}, ${lng.toStringAsFixed(2)}';
+                        }
+                     }
+                  }
+                  
+                  if (!groupedDocs.containsKey(loc)) {
+                    groupedDocs[loc] = [];
+                  }
+                  groupedDocs[loc]!.add(doc);
+                }
                 
                 return ListView.builder(
                   padding: const EdgeInsets.only(bottom: 80), // Padding for bottom nav
-                  itemCount: fieldDocs.length,
+                  itemCount: groupedDocs.length,
                   itemBuilder: (context, index) {
-                    var doc = fieldDocs[index];
-                    final data = doc.data() as Map<String, dynamic>;
-                    String urgencyStr = data['urgency'] ?? 'Medium';
-                    Color uColor = urgencyStr == 'High' ? AppTheme.urgencyHigh : AppTheme.urgencyMedium;
+                    String locKey = groupedDocs.keys.elementAt(index);
+                    List<QueryDocumentSnapshot> clusterDocs = groupedDocs[locKey]!;
                     
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: _buildHotspotRow(
-                        context, 
-                        data,
-                        uColor,
-                        doc.id
-                      ),
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0, top: 8.0, bottom: 12.0),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.share_location, color: AppTheme.primary, size: 16),
+                              const SizedBox(width: 8),
+                              Text('CLUSTER: $locKey (${clusterDocs.length} INCIDENTS)', 
+                                style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.5)
+                              ),
+                            ],
+                          ),
+                        ),
+                        ...clusterDocs.map((doc) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          String urgencyStr = data['urgency'] ?? 'Medium';
+                          Color uColor = urgencyStr == 'High' || urgencyStr == 'Critical' 
+                              ? AppTheme.urgencyHigh 
+                              : AppTheme.urgencyMedium;
+                          
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16.0),
+                            child: _buildHotspotRow(
+                              context, 
+                              data,
+                              uColor,
+                              doc.id
+                            ),
+                          );
+                        }),
+                        const Divider(color: AppTheme.surfaceLow, height: 32),
+                      ],
                     );
                   },
                 );
@@ -207,12 +268,16 @@ class HeatmapDashboard extends StatelessWidget {
           urgency: data['urgency'] ?? 'High',
         )));
       } : null,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: AppTheme.stitchCardWithLeftBorder(urgencyColor),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: AppTheme.stitchCardWithLeftBorder(urgencyColor),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -242,7 +307,7 @@ class HeatmapDashboard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    )));
   }
 }
 

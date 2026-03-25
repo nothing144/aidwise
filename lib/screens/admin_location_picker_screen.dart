@@ -6,8 +6,9 @@ import '../theme/app_theme.dart';
 
 class AdminLocationPickerScreen extends StatefulWidget {
   final String reportType;
+  final bool isReturnMode;
   
-  const AdminLocationPickerScreen({super.key, required this.reportType});
+  const AdminLocationPickerScreen({super.key, required this.reportType, this.isReturnMode = false});
 
   @override
   State<AdminLocationPickerScreen> createState() => _AdminLocationPickerScreenState();
@@ -57,6 +58,11 @@ class _AdminLocationPickerScreenState extends State<AdminLocationPickerScreen> {
 
   Future<void> _confirmAndSave() async {
     if (_selectedLocation == null) return;
+
+    if (widget.isReturnMode) {
+      Navigator.pop(context, _selectedLocation);
+      return;
+    }
 
     setState(() {
       _isSaving = true;

@@ -1,9 +1,12 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
+import '../services/ai_service.dart';
 import 'admin_location_picker_screen.dart';
 
 class AIScannerScreen extends StatefulWidget {
@@ -20,6 +23,10 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
   bool _isScanning = false;
   bool _isExtracting = false;
   bool _showSuccess = false;
+
+  String _aiUrgency = 'High';
+  String _aiType = 'Identified via AI Scanner';
+  String _aiLocation = 'Coordinates Logged';
 
   final ImagePicker _picker = ImagePicker();
   XFile? _imageFile;
@@ -89,69 +96,137 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
     super.dispose();
   }
 
-  void _startScan() {
+  void _startScan() async {
     setState(() {
       _isScanning = true;
     });
     _controller.repeat(reverse: true);
     
-    // Simulate AI extraction taking 2 seconds
-    Future.delayed(const Duration(seconds: 2), () {
+    // Grab input (either manual text or image)
+    Uint8List? imgBytes;
+    if (_imageFile != null) {
+      imgBytes = await _imageFile!.readAsBytes();
+    }
+    String inputForAI = _manualController.text.trim();
+
+    try {
+      final aiResult = await AIService.analyzeFieldReport(textInput: inputForAI, imageBytes: imgBytes);
       if (mounted) {
-        _controller.stop();
         setState(() {
-          _isScanning = false;
-          _isExtracting = true;
+          _aiUrgency = aiResult['urgency'] ?? 'High';
+          _aiType = aiResult['type'] ?? 'Emergency Response';
+          _aiLocation = aiResult['location'] ?? 'Location Logged (GPS)';
         });
       }
-    });
+    } catch (e) {
+      debugPrint("AI Service Error: $e");
+    }
+
+    if (mounted) {
+      _controller.stop();
+      setState(() {
+        _isScanning = false;
+        _isExtracting = true;
+      });
+    }
   }
 
   void _confirmAndDispatch([String? manualText]) async {
+    if (widget.isAdminMode) {
+      if (mounted) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => AdminLocationPickerScreen(reportType: _aiType)));
+      }
+      return;
+    }
+
+    // Ask field worker for location method
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('SET INCIDENT LOCATION', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1.5)),
+              const SizedBox(height: 24),
+              ListTile(
+                leading: const Icon(Icons.my_location, color: AppTheme.primary),
+                title: const Text('Use Live GPS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: Text('Fastest. Marks your current standing position.', style: TextStyle(color: AppTheme.textSecondary)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _finalizeDispatch(null);
+                },
+              ),
+              const Divider(color: AppTheme.surfaceLow),
+              ListTile(
+                leading: const Icon(Icons.map, color: Colors.orangeAccent),
+                title: const Text('Pin on Map', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: Text('Pick a distant village or remote location.', style: TextStyle(color: AppTheme.textSecondary)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final LatLng? selectedLoc = await Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => AdminLocationPickerScreen(reportType: _aiType, isReturnMode: true)
+                  ));
+                  if (selectedLoc != null) {
+                    _finalizeDispatch(selectedLoc);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _finalizeDispatch(LatLng? customLocation) async {
     setState(() {
       _isExtracting = false;
       _showSuccess = true;
     });
 
     try {
-      // 1. Request Location Permissions and Grab GPS
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) throw Exception('Location services are disabled.');
+      double lat;
+      double lng;
+      String locText;
 
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+      if (customLocation != null) {
+        lat = customLocation.latitude;
+        lng = customLocation.longitude;
+        locText = 'Map Pin: ${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+      } else {
+        bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!serviceEnabled) throw Exception('Location services are disabled.');
+
+        LocationPermission permission = await Geolocator.checkPermission();
         if (permission == LocationPermission.denied) {
-          throw Exception('Location permissions are denied');
+          permission = await Geolocator.requestPermission();
+          if (permission == LocationPermission.denied) {
+            throw Exception('Location permissions are denied');
+          }
         }
-      }
-      if (permission == LocationPermission.deniedForever) {
-        throw Exception('Location permissions are permanently denied');
-      } 
+        if (permission == LocationPermission.deniedForever) {
+          throw Exception('Location permissions are permanently denied');
+        } 
 
-      Position position = await Geolocator.getCurrentPosition();
-
-      // 2. Push to Firestore with GPS Coordinates!
-      String reportType = manualText != null && manualText.isNotEmpty 
-          ? manualText 
-          : 'Emergency Response (Photo Analyzed)';
-
-      // Check Admin Mode - Route to Location Picker instead of GPS
-      if (widget.isAdminMode) {
-        if (mounted) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => AdminLocationPickerScreen(reportType: reportType)));
-        }
-        return;
+        Position position = await Geolocator.getCurrentPosition();
+        lat = position.latitude;
+        lng = position.longitude;
+        locText = 'GPS: ${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
       }
 
-      // Live Field Worker Mode - Uses GPS
       await FirebaseFirestore.instance.collection('reports').add({
-        'type': reportType,
-        'location': 'Location Logged (GPS)',
-        'latitude': position.latitude,
-        'longitude': position.longitude,
-        'urgency': 'High',
+        'type': _aiType,
+        'location': locText,
+        'latitude': lat,
+        'longitude': lng,
+        'urgency': _aiUrgency,
         'status': 'Open',
+        'source': 'Field Worker',
         'timestamp': FieldValue.serverTimestamp(),
       });
     } catch (e) {
@@ -382,7 +457,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(child: Text('Data\nExtracted', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900, height: 1.1))),
+              Expanded(child: const Text('Data Aggregator', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold))),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -393,11 +468,11 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
             ],
           ),
           const SizedBox(height: 20),
-          _buildStitchCard('LOCATION', Icons.place, 'Coordinates Logged (GPS)', AppTheme.primary),
+          _buildStitchCard('LOCATION', Icons.place, _aiLocation, AppTheme.primary),
           const SizedBox(height: 10),
-          _buildStitchCard('RESOURCE NEED', Icons.inventory, 'Identified via AI Scanner', AppTheme.primary),
+          _buildStitchCard('RESOURCE NEED', Icons.inventory, _aiType, AppTheme.primary),
           const SizedBox(height: 10),
-          _buildStitchCard('URGENCY', Icons.star, 'HIGH', AppTheme.secondary),
+          _buildStitchCard('URGENCY', Icons.star, _aiUrgency.toUpperCase(), AppTheme.secondary),
           const SizedBox(height: 20),
           Text('DETECTED TAGS', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),

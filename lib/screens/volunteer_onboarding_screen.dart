@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_theme.dart';
 
 class VolunteerOnboardingScreen extends StatefulWidget {
@@ -9,11 +11,35 @@ class VolunteerOnboardingScreen extends StatefulWidget {
 }
 
 class _VolunteerOnboardingScreenState extends State<VolunteerOnboardingScreen> {
-  final List<String> _skills = ['Medical', 'Logistics', 'Search & Rescue', 'Transport', 'Translation'];
+  final List<String> _skills = ['Medical Provider', 'Blood Donor', 'Teacher / Tutor', 'Logistics & Transport', 'Food Distribution', 'Search & Rescue', 'IT Support', 'Counselling'];
   final Set<String> _selectedSkills = {};
+  final TextEditingController _vehicleController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  bool _isSaving = false;
 
-  void _completeOnboarding() {
-    Navigator.pop(context); // Return to root (where AuthWrapper will display the dashboard)
+  Future<void> _completeOnboarding() async {
+    if (_selectedSkills.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select at least one skill.'), backgroundColor: Colors.red));
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+          'skills': _selectedSkills.toList(),
+          'vehicleType': _vehicleController.text.trim(),
+          'phone': _phoneController.text.trim(),
+        });
+      }
+      if (mounted) Navigator.pop(context); // Return to root (AuthWrapper)
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving profile: $e'), backgroundColor: Colors.red));
+      }
+    }
   }
 
   @override
@@ -36,9 +62,9 @@ class _VolunteerOnboardingScreenState extends State<VolunteerOnboardingScreen> {
             Text('Register your skills so our AI can match you with critical needs.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16)),
             const SizedBox(height: 32),
             
-            _buildTextField('Full Name', Icons.person),
+            _buildTextField('Phone Number', Icons.phone, _phoneController),
             const SizedBox(height: 16),
-            _buildTextField('Vehicle Type', Icons.directions_car),
+            _buildTextField('Vehicle Type (Optional, e.g. Truck, Bike)', Icons.directions_car, _vehicleController),
             
             const SizedBox(height: 32),
             const Text('YOUR SKILLS (AI MATCHING)', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
@@ -79,13 +105,15 @@ class _VolunteerOnboardingScreenState extends State<VolunteerOnboardingScreen> {
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: _completeOnboarding,
+                onPressed: _isSaving ? null : _completeOnboarding,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primary,
                   foregroundColor: Colors.black,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: const Text('INITIALIZE PROFILE', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
+                child: _isSaving 
+                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black)) 
+                    : const Text('INITIALIZE PROFILE', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
               ),
             )
           ],
@@ -94,7 +122,7 @@ class _VolunteerOnboardingScreenState extends State<VolunteerOnboardingScreen> {
     );
   }
 
-  Widget _buildTextField(String label, IconData icon) {
+  Widget _buildTextField(String label, IconData icon, TextEditingController controller) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
@@ -103,6 +131,7 @@ class _VolunteerOnboardingScreenState extends State<VolunteerOnboardingScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: TextField(
+        controller: controller,
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
           icon: Icon(icon, color: AppTheme.textSecondary),
