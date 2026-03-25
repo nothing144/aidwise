@@ -361,11 +361,11 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppTheme.surface.withValues(alpha: 0.95),
+        color: AppTheme.cardSurface,
         borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-        border: const Border(top: BorderSide(color: AppTheme.primary, width: 2)),
+        border: const Border(top: BorderSide(color: AppTheme.primary, width: 1)),
         boxShadow: [
-          BoxShadow(color: AppTheme.primary.withValues(alpha: 0.2), blurRadius: 30, offset: const Offset(0, -5))
+          BoxShadow(color: AppTheme.primary.withValues(alpha: 0.1), blurRadius: 30, offset: const Offset(0, -5))
         ],
       ),
       child: Column(
@@ -373,29 +373,62 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
         children: [
           Row(
             children: [
-              const Icon(Icons.check_circle, color: AppTheme.primary),
+              Container(width: 10, height: 10, decoration: BoxDecoration(color: AppTheme.primary, borderRadius: BorderRadius.circular(2))),
               const SizedBox(width: 8),
-              Text('DATA EXTRACTED SUCCESSFULLY', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              Text('STATUS: COMPLETE', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 12)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(child: Text('Data\nExtracted', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900, height: 1.1))),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('98%', style: TextStyle(color: AppTheme.primary, fontSize: 28, fontWeight: FontWeight.w900)),
+                  Text('CONFIDENCE\nINDEX', style: TextStyle(color: AppTheme.textSecondary, fontSize: 9, letterSpacing: 1, height: 1.3), textAlign: TextAlign.right),
+                ],
+              )
             ],
           ),
           const SizedBox(height: 20),
-          _buildExtractedField('Location', 'Sector 4 Shelter (Coordinates logged)'),
-          const SizedBox(height: 12),
-          _buildExtractedField('Need', '50 Blankets & 2 Medics'),
-          const SizedBox(height: 12),
-          _buildExtractedField('Urgency', 'URGENT (AI Triage)', color: AppTheme.urgencyHigh),
+          _buildStitchCard('LOCATION', Icons.place, 'Coordinates Logged (GPS)', AppTheme.primary),
+          const SizedBox(height: 10),
+          _buildStitchCard('RESOURCE NEED', Icons.inventory, 'Identified via AI Scanner', AppTheme.primary),
+          const SizedBox(height: 10),
+          _buildStitchCard('URGENCY', Icons.star, 'HIGH', AppTheme.secondary),
+          const SizedBox(height: 20),
+          Text('DETECTED TAGS', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildTag('FIELD_REPORT'),
+              const SizedBox(width: 8),
+              _buildTag('GPS_VERIFIED'),
+            ],
+          ),
           const SizedBox(height: 24),
+          // Gradient Confirm Button
           SizedBox(
             width: double.infinity,
             height: 56,
-            child: ElevatedButton(
-              onPressed: () => _confirmAndDispatch(_manualController.text),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: AppTheme.cyanMagentaGradient,
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text('PUSH TO COMMAND MAP', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+              child: ElevatedButton.icon(
+                onPressed: () => _confirmAndDispatch(_manualController.text),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.bookmark, size: 22),
+                label: const Text('CONFIRM & ADD TO HEATMAP', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 13)),
+              ),
             ),
           )
         ],
@@ -403,26 +436,36 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildExtractedField(String label, String value, {Color? color}) {
-    return Row(
-      children: [
-        SizedBox(width: 80, child: Text(label, style: const TextStyle(color: Colors.grey))),
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceLow,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2)),
-            ),
-            child: Text(value, style: TextStyle(
-              color: color ?? Colors.white,
-              fontWeight: FontWeight.bold,
-              shadows: [if (color != null) Shadow(color: color.withValues(alpha: 0.5), blurRadius: 10)]
-            )),
-          ),
-        ),
-      ],
+  Widget _buildStitchCard(String label, IconData icon, String value, Color accent) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: AppTheme.stitchCardWithLeftBorder(accent),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(icon, color: accent, size: 20),
+              const SizedBox(width: 8),
+              Text(value, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTag(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(text, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10, letterSpacing: 1, fontWeight: FontWeight.bold)),
     );
   }
 

@@ -134,18 +134,25 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Icon(Icons.star, color: AppTheme.urgencyMedium, size: 20),
-                      const SizedBox(width: 8),
-                      const Text('#1 OPTIMAL SYNERGY MATCH', style: TextStyle(
-                        color: AppTheme.urgencyMedium,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
-                      )),
+                      const Text('TOP 3 PERFECTLY MATCHED\nVOLUNTEERS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, height: 1.3)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text('AUTO-\nSCAN', style: TextStyle(color: AppTheme.textSecondary, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1), textAlign: TextAlign.center),
+                      )
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _buildVolunteerCard('Sarah Chen', '98.5%', '1.2km away', 'Perfect logistical match with requested vehicle. Available now.'),
+                  _buildVolunteerCard('Agent K', '0.8 MILES AWAY', 'MEDICAL EXPERTISE 98%', AppTheme.primary, Icons.person_search),
+                  const SizedBox(height: 12),
+                  _buildVolunteerCard('Unit 704', '1.2 MILES AWAY', 'RAPID RESPONSE CERTIFIED', AppTheme.secondary, Icons.person),
+                  const SizedBox(height: 12),
+                  _buildVolunteerCard('Sarah J', '1.5 MILES AWAY', 'MATCHES REQUIRED LOGISTICS SKILL', AppTheme.urgencyMedium, Icons.groups),
                 ],
               ),
             ),
@@ -156,18 +163,26 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
         padding: const EdgeInsets.all(24.0),
         child: SizedBox(
           height: 56,
-          child: ElevatedButton(
-            onPressed: _isDispatching ? null : _dispatch,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.black,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              shadowColor: AppTheme.primary.withValues(alpha: 0.5),
-              elevation: 10,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: AppTheme.cyanMagentaGradient,
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: _isDispatching 
-                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3))
-                : const Text('DISPATCH VOLUNTEER', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
+            child: ElevatedButton.icon(
+              onPressed: _isDispatching ? null : _dispatch,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: _isDispatching 
+                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3))
+                  : const Icon(Icons.groups, size: 24),
+              label: _isDispatching 
+                  ? const Text('DISPATCHING...')
+                  : const Text('DISPATCH SELECTED VOLUNTEERS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+            ),
           ),
         ),
       ),
@@ -229,43 +244,49 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
     );
   }
 
-  Widget _buildVolunteerCard(String name, String match, String distance, String aiReason) {
+  Widget _buildVolunteerCard(String name, String distance, String skill, Color skillColor, IconData avatarIcon) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.surface.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.8), width: 2),
-        boxShadow: AppTheme.cyanGlow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.all(16),
+      decoration: AppTheme.stitchCardWithLeftBorder(skillColor),
+      child: Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-              Text(match, style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w900, fontSize: 22)),
-            ],
+          CircleAvatar(
+            backgroundColor: skillColor.withValues(alpha: 0.2),
+            radius: 24,
+            child: Icon(avatarIcon, color: skillColor, size: 24),
           ),
-          const SizedBox(height: 4),
-          Text(distance, style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.secondary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.3)),
-            ),
-            child: Row(
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.psychology, color: AppTheme.secondary, size: 20),
-                const SizedBox(width: 12),
-                Expanded(child: Text(aiReason, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, height: 1.4))),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(distance, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: skillColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: skillColor.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.star, color: skillColor, size: 12),
+                      const SizedBox(width: 4),
+                      Text(skill, style: TextStyle(color: skillColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                    ],
+                  ),
+                )
               ],
             ),
-          )
+          ),
         ],
       ),
     );

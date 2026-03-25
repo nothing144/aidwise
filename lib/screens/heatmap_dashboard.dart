@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'smart_matcher_screen.dart';
+
+import 'report_detail_map_screen.dart';
 import '../services/auth_service.dart';
 
 class HeatmapDashboard extends StatelessWidget {
@@ -14,72 +14,19 @@ class HeatmapDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      body: Stack(
-        children: [
-          // Background "Heatmap" representation
-          Positioned.fill(
-            child: _buildSimulatedMap(),
-          ),
-          
-          // Foreground UI
-          SafeArea(
-            child: Column(
-              children: [
-                if (showAppBar) _buildTopBar(),
-                if (showAppBar) const SizedBox(height: 16),
-                _buildMetricsRow(),
-                const Spacer(),
-                _buildAIPriorityDrawer(context),
-              ],
+      body: SafeArea(
+        child: Column(
+          children: [
+            if (showAppBar) _buildTopBar(),
+            if (showAppBar) const SizedBox(height: 16),
+            _buildMetricsRow(),
+            const SizedBox(height: 24),
+            Expanded(
+              child: _buildAIPriorityList(context),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    );
-  }
-
-  Widget _buildSimulatedMap() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('reports').where('status', isEqualTo: 'Open').snapshots(),
-      builder: (context, snapshot) {
-        Set<Marker> markers = {};
-        
-        if (snapshot.hasData) {
-          for (var doc in snapshot.data!.docs) {
-            final data = doc.data() as Map<String, dynamic>;
-            if (data.containsKey('latitude') && data.containsKey('longitude')) {
-              String urgency = data['urgency'] ?? 'Medium';
-              markers.add(
-                Marker(
-                  markerId: MarkerId(doc.id),
-                  position: LatLng(data['latitude'], data['longitude']),
-                  infoWindow: InfoWindow(
-                    title: data['type'] ?? 'Incident Zone',
-                    snippet: 'Tap here to dispatch Volunteer',
-                    onTap: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => SmartMatcherScreen(reportId: doc.id)));
-                    }
-                  ),
-                  icon: BitmapDescriptor.defaultMarkerWithHue(
-                    urgency == 'High' ? BitmapDescriptor.hueRed : BitmapDescriptor.hueOrange
-                  )
-                )
-              );
-            }
-          }
-        }
-
-        return GoogleMap(
-          initialCameraPosition: const CameraPosition(
-            target: LatLng(28.6139, 77.2090), // Default generic center
-            zoom: 12,
-          ),
-          markers: markers,
-          myLocationEnabled: true,
-          mapType: MapType.normal,
-          zoomControlsEnabled: false,
-        );
-      }
     );
   }
 
@@ -169,16 +116,13 @@ class HeatmapDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildAIPriorityDrawer(BuildContext context) {
+  Widget _buildAIPriorityList(BuildContext context) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
         color: AppTheme.surface.withValues(alpha: 0.95),
-        borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-        border: const Border(top: BorderSide(color: AppTheme.surfaceLow)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, -5))
-        ],
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+        border: const Border(top: BorderSide(color: AppTheme.primary, width: 2)),
       ),
       padding: const EdgeInsets.all(24.0),
       child: Column(
@@ -186,70 +130,86 @@ class HeatmapDashboard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_awesome, color: AppTheme.primary, size: 20),
+              const Icon(Icons.auto_awesome, color: AppTheme.primary, size: 24),
               const SizedBox(width: 10),
               const Text('AI PRIORITY RANKINGS', style: TextStyle(
                 color: AppTheme.primary, 
-                fontWeight: FontWeight.bold, 
-                letterSpacing: 1.5,
+                fontWeight: FontWeight.w900, 
+                letterSpacing: 2.0,
               )),
+              const Spacer(),
+              const Text('FIELD REPORTS', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5))
             ],
           ),
-          const SizedBox(height: 20),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('reports').where('status', isEqualTo: 'Open').snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
-              }
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24.0),
-                  child: Text('No active hotspots detected.', style: TextStyle(color: AppTheme.textSecondary, fontStyle: FontStyle.italic)),
+          const SizedBox(height: 24),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('reports').where('status', isEqualTo: 'Open').snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+                }
+                
+                var allDocs = snapshot.data?.docs ?? [];
+                // ONLY show Field Worker reports (not Admin Dashboard reports)
+                var fieldDocs = allDocs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  return data['source'] != 'Admin Dashboard';
+                }).toList();
+                
+                if (fieldDocs.isEmpty) {
+                  return const Center(
+                    child: Text('No active field hotspots detected.', style: TextStyle(color: AppTheme.textSecondary)),
+                  );
+                }
+                
+                return ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 80), // Padding for bottom nav
+                  itemCount: fieldDocs.length,
+                  itemBuilder: (context, index) {
+                    var doc = fieldDocs[index];
+                    final data = doc.data() as Map<String, dynamic>;
+                    String urgencyStr = data['urgency'] ?? 'Medium';
+                    Color uColor = urgencyStr == 'High' ? AppTheme.urgencyHigh : AppTheme.urgencyMedium;
+                    
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: _buildHotspotRow(
+                        context, 
+                        data,
+                        uColor,
+                        doc.id
+                      ),
+                    );
+                  },
                 );
               }
-              return Column(
-                children: snapshot.data!.docs.map((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  String urgencyStr = data['urgency'] ?? 'Medium';
-                  Color uColor = urgencyStr == 'High' ? AppTheme.urgencyHigh : AppTheme.urgencyMedium;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: _buildHotspotRow(
-                      context, 
-                      data['location'] ?? 'Unknown Location', 
-                      data['type'] ?? 'General Need', 
-                      '98%', // Mock AI confidence
-                      uColor,
-                      doc.id
-                    ),
-                  );
-                }).toList(),
-              );
-            }
+            ),
           ),
-          const SizedBox(height: 24), // Padding for FAB
         ],
       ),
     );
   }
 
-  Widget _buildHotspotRow(BuildContext context, String location, String need, String confidence, Color urgencyColor, String reportId) {
+  Widget _buildHotspotRow(BuildContext context, Map<String, dynamic> data, Color urgencyColor, String reportId) {
+    bool hasCoords = data.containsKey('latitude') && data.containsKey('longitude');
+    String location = data['location'] ?? 'Unknown Location';
+    String need = data['type'] ?? 'General Need';
+
     return GestureDetector(
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => SmartMatcherScreen(
+      onTap: hasCoords ? () {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => ReportDetailMapScreen(
           reportId: reportId,
+          reportType: need,
           location: location,
-          need: need,
+          latitude: (data['latitude'] as num).toDouble(),
+          longitude: (data['longitude'] as num).toDouble(),
+          urgency: data['urgency'] ?? 'High',
         )));
-      },
+      } : null,
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppTheme.background,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.surfaceLow),
-        ),
+        decoration: AppTheme.stitchCardWithLeftBorder(urgencyColor),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -277,7 +237,7 @@ class HeatmapDashboard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
               ),
-              child: Text(confidence, style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
+              child: const Text('98%', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
             )
           ],
         ),

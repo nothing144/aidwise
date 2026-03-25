@@ -17,7 +17,19 @@ class AppTheme {
   static const Color urgencyHigh = Color(0xFFFF1744); // Neon Red
   static const Color urgencyMedium = Color(0xFFFF9100); // Neon Orange
   static const Color urgencyLow = Color(0xFF00E676); // Neon Green
-  static const Color success = Color(0xFF00E676); // Same as low urgency
+  static const Color success = Color(0xFF00E676);
+
+  // Stitch-style Gradients
+  static const LinearGradient cyanMagentaGradient = LinearGradient(
+    colors: [Color(0xFF00E5FF), Color(0xFFD500F9)],
+  );
+
+  static const LinearGradient cyanMagentaGradientSubtle = LinearGradient(
+    colors: [Color(0xFF003844), Color(0xFF2A0040)],
+  );
+
+  // Card Surface (slightly lifted from background)
+  static const Color cardSurface = Color(0xFF111318);
 
   static ThemeData get darkTheme {
     return ThemeData(
@@ -87,4 +99,17 @@ class AppTheme {
           offset: const Offset(0, 4),
         )
       ];
+
+  // Stitch-style Helpers
+  static BoxDecoration get stitchCard => BoxDecoration(
+    color: cardSurface,
+    borderRadius: BorderRadius.circular(12),
+    border: Border.all(color: const Color(0xFF1E2A35), width: 1),
+  );
+
+  static BoxDecoration stitchCardWithLeftBorder(Color color) => BoxDecoration(
+    color: cardSurface,
+    borderRadius: BorderRadius.circular(12),
+    border: Border(left: BorderSide(color: color, width: 3), top: BorderSide(color: const Color(0xFF1E2A35)), right: BorderSide(color: const Color(0xFF1E2A35)), bottom: BorderSide(color: const Color(0xFF1E2A35))),
+  );
 }

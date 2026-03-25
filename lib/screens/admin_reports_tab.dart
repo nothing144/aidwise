@@ -24,9 +24,14 @@ class AdminReportsTab extends StatelessWidget {
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
 
-          var reports = snapshot.data!.docs;
+          var allReports = snapshot.data!.docs;
+          var reports = allReports.where((doc) {
+            var data = doc.data() as Map<String, dynamic>;
+            return data['source'] == 'Admin Dashboard';
+          }).toList();
+
           if (reports.isEmpty) {
-            return const Center(child: Text('No reports in system.', style: TextStyle(color: AppTheme.textSecondary)));
+            return const Center(child: Text('No office reports pinned yet.', style: TextStyle(color: AppTheme.textSecondary)));
           }
 
           return ListView.builder(

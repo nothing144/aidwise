@@ -45,9 +45,10 @@ app.*.map.json
 /android/app/release
 
 # Firebase Config Files
-lib/firebase_options.dart
-android/app/google-services.json
-ios/Runner/GoogleService-Info.plist
-macos/Runner/GoogleService-Info.plist
-firebase.json
-.firebaserc
+# (Uncomment below to ignore Firebase config in open-source repos)
+# lib/firebase_options.dart
+# android/app/google-services.json
+# ios/Runner/GoogleService-Info.plist
+# macos/Runner/GoogleService-Info.plist
+# firebase.json
+# .firebaserc

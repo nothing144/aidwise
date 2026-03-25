@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "684171435154",
+    "project_id": "aidwise-2b52f",
+    "storage_bucket": "aidwise-2b52f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:684171435154:android:8658c7b8ccaa5121381a4b",
+        "android_client_info": {
+          "package_name": "com.example.aidwise"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDB8Z40uMPnWAICbFRmMnJN9FGdtXXMYLA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -30,11 +30,7 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
   bool _missionAccepted = false;
   bool _isCompleting = false;
 
-  void _acceptMission() {
-    setState(() {
-      _missionAccepted = true;
-    });
-  }
+
 
   void _declineMission() async {
     try {
@@ -103,11 +99,37 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('PRIORITY MISSION', style: TextStyle(fontSize: 14, letterSpacing: 2, fontWeight: FontWeight.w800, color: Colors.white)),
-        centerTitle: true,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.auto_awesome, color: AppTheme.secondary, size: 18),
+            const SizedBox(width: 8),
+            const Text('MISSION TERMINAL', style: TextStyle(fontSize: 14, letterSpacing: 2, fontWeight: FontWeight.w800, color: AppTheme.secondary)),
+          ],
+        ),
+        centerTitle: false,
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.auto_awesome, color: AppTheme.primary, size: 12),
+                const SizedBox(width: 4),
+                Text('AI MATCH', style: TextStyle(color: AppTheme.primary, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              ],
+            ),
+          )
+        ],
       ),
       body: _missionAccepted ? _buildActiveMissionState() : _buildBriefingState(),
     );
@@ -119,32 +141,43 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text('ACTIVE DIRECTIVE', style: TextStyle(color: AppTheme.primary, fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(widget.title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white, height: 1.1)),
+          const SizedBox(height: 4),
+          Text(widget.location, style: const TextStyle(fontSize: 16, color: AppTheme.primary)),
+          
+          const SizedBox(height: 20),
+
+          // Mission Detail Card (Stitch-style)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.urgencyHigh.withValues(alpha: 0.1),
-              border: Border.all(color: AppTheme.urgencyHigh.withValues(alpha: 0.8), width: 2),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: AppTheme.urgencyHigh.withValues(alpha: 0.3), blurRadius: 20)],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            padding: const EdgeInsets.all(16),
+            decoration: AppTheme.stitchCard,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.priority_high, color: AppTheme.urgencyHigh, size: 20),
-                const SizedBox(width: 8),
-                Text('CRITICAL NEED', style: TextStyle(
-                  color: AppTheme.urgencyHigh, fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5,
-                  shadows: [Shadow(color: AppTheme.urgencyHigh.withValues(alpha: 0.8), blurRadius: 10)],
-                )),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(border: Border.all(color: AppTheme.textSecondary.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(4)),
+                      child: const Text('PRIORITY HIGH', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(border: Border.all(color: AppTheme.textSecondary.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(4)),
+                      child: const Text('LOGISTICS', style: TextStyle(color: AppTheme.textSecondary, fontSize: 9, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text('Dispatch to ${widget.location}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Text('Field report from ground team. Logistics required for immediate distribution.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, height: 1.4)),
               ],
             ),
           ),
-          const SizedBox(height: 24),
-          Text(widget.title, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, height: 1.1)),
-          const SizedBox(height: 8),
-          Text(widget.location, style: const TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
-          
           const SizedBox(height: 24),
           Container(
             height: 200,
@@ -173,14 +206,93 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: AppTheme.stitchCard,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('TIME REMAINING', style: TextStyle(color: AppTheme.textSecondary, fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      const Text('00:42:15', style: TextStyle(color: AppTheme.primary, fontSize: 18, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: AppTheme.stitchCard,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('IMPACT XP', style: TextStyle(color: AppTheme.textSecondary, fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      const Text('+850 UNIT', style: TextStyle(color: AppTheme.secondary, fontSize: 18, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
           const Spacer(),
           Column(
             children: [
-              _buildSwipeToAccept(),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: _declineMission,
-                child: const Text('DECLINE MISSION', style: TextStyle(color: AppTheme.textSecondary, letterSpacing: 2, fontWeight: FontWeight.bold)),
+              Container(
+                height: 64,
+                decoration: BoxDecoration(
+                  gradient: AppTheme.cyanMagentaGradientSubtle,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: AppTheme.cyanGlow,
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_forward_ios, color: Colors.black),
+                        onPressed: () {
+                          setState(() { _missionAccepted = true; });
+                        },
+                      ),
+                    ),
+                    const Expanded(
+                      child: Center(
+                        child: Text('SLIDE TO ACCEPT MISSION', style: TextStyle(
+                          color: AppTheme.primary,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2,
+                          fontSize: 12,
+                        )),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: _declineMission,
+                    child: const Text('REJECT DIRECTIVE', style: TextStyle(color: AppTheme.textSecondary, letterSpacing: 1.5, fontWeight: FontWeight.bold, fontSize: 10)),
+                  ),
+                  TextButton(
+                    onPressed: () {},
+                    child: const Text('REQUEST SUPPORT', style: TextStyle(color: AppTheme.textSecondary, letterSpacing: 1.5, fontWeight: FontWeight.bold, fontSize: 10)),
+                  ),
+                ],
               )
             ],
           )
@@ -272,48 +384,6 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
           ),
         )
       ],
-    );
-  }
-
-  Widget _buildSwipeToAccept() {
-    return GestureDetector(
-      onPanUpdate: (details) {
-        if (details.delta.dx > 10) {
-          _acceptMission();
-        }
-      },
-      child: Container(
-        height: 64,
-        decoration: BoxDecoration(
-          color: AppTheme.primary.withValues(alpha: 0.2),
-          borderRadius: BorderRadius.circular(32),
-          border: Border.all(color: AppTheme.primary),
-          boxShadow: AppTheme.cyanGlow,
-        ),
-        child: Stack(
-          children: [
-             Center(
-              child: Text('>> SWIPE RIGHT TO ACCEPT >>', style: TextStyle(
-                color: AppTheme.primary,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 2,
-                shadows: [Shadow(color: Colors.black.withValues(alpha: 0.8), blurRadius: 5)],
-              )),
-            ),
-            Positioned(
-              left: 4, top: 4, bottom: 4,
-              child: Container(
-                width: 56,
-                decoration: BoxDecoration(
-                  color: AppTheme.primary,
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: const Icon(Icons.double_arrow, color: Colors.black),
-              ),
-            )
-          ],
-        ),
-      ),
     );
   }
 }

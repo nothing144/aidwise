@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geocoding/geocoding.dart';
 import '../theme/app_theme.dart';
 
 class AdminLocationPickerScreen extends StatefulWidget {
@@ -15,11 +16,43 @@ class AdminLocationPickerScreen extends StatefulWidget {
 class _AdminLocationPickerScreenState extends State<AdminLocationPickerScreen> {
   LatLng? _selectedLocation;
   bool _isSaving = false;
+  bool _isSearching = false;
+  GoogleMapController? _mapController;
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _mapController?.dispose();
+    super.dispose();
+  }
 
   void _onMapTapped(LatLng position) {
     setState(() {
       _selectedLocation = position;
     });
+  }
+
+  Future<void> _searchLocation() async {
+    if (_searchController.text.trim().isEmpty) return;
+    FocusScope.of(context).unfocus();
+    
+    setState(() => _isSearching = true);
+    try {
+      List<Location> locations = await locationFromAddress(_searchController.text.trim());
+      if (locations.isNotEmpty) {
+        Location loc = locations.first;
+        LatLng newPos = LatLng(loc.latitude, loc.longitude);
+        setState(() {
+          _selectedLocation = newPos;
+        });
+        _mapController?.animateCamera(CameraUpdate.newLatLngZoom(newPos, 15));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location not found')));
+    } finally {
+      if (mounted) setState(() => _isSearching = false);
+    }
   }
 
   Future<void> _confirmAndSave() async {
@@ -71,6 +104,7 @@ class _AdminLocationPickerScreenState extends State<AdminLocationPickerScreen> {
       body: Stack(
         children: [
           GoogleMap(
+            onMapCreated: (controller) => _mapController = controller,
             initialCameraPosition: const CameraPosition(
               target: LatLng(28.6139, 77.2090), // Default to New Delhi or generic center
               zoom: 12,
@@ -85,23 +119,47 @@ class _AdminLocationPickerScreenState extends State<AdminLocationPickerScreen> {
             },
             mapType: MapType.normal,
             myLocationEnabled: true,
+            zoomControlsEnabled: false,
           ),
-          if (_selectedLocation == null)
-            Positioned(
-              top: 20, left: 20, right: 20,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.surface.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.primary),
-                ),
-                child: const Text('TAP ANYWHERE ON THE MAP TO DROP A PIN', 
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, letterSpacing: 1.5)
-                ),
+          
+          // Custom Search Bar Top Overlay
+          Positioned(
+            top: 16, left: 16, right: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.surface.withValues(alpha: 0.95),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.5)),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10)],
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.search, color: AppTheme.textSecondary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      style: const TextStyle(color: Colors.white),
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (_) => _searchLocation(),
+                      decoration: InputDecoration(
+                        hintText: 'Search city, street, or landmark...',
+                        hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 14),
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                  _isSearching 
+                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2))
+                    : IconButton(
+                        icon: const Icon(Icons.arrow_forward_ios, color: AppTheme.primary, size: 16),
+                        onPressed: _searchLocation,
+                      )
+                ],
               ),
             ),
+          ),
           
           if (_selectedLocation != null)
             Align(
