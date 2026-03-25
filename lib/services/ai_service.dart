@@ -200,6 +200,45 @@ Return JSON: {"reasoning": "1 short professional sentence"}''';
     }
   }
 
+  // ─────────── AI SITUATION SUMMARY (for Admin Dashboard) ───────────
+  /// Generates a 1-paragraph strategic summary of all open incidents.
+  static Future<String> generateSituationSummary(List<Map<String, dynamic>> openReports, int volunteerCount) async {
+    if (openReports.isEmpty) {
+      return 'No active incidents. All systems nominal.';
+    }
+
+    if (!isLiveMode) {
+      await Future.delayed(const Duration(seconds: 1));
+      return 'SITUATION BRIEF: ${openReports.length} active incidents across multiple clusters. '
+          'Primary concern: Medical emergencies (60%). $volunteerCount volunteers available for deployment. '
+          'Recommend prioritizing critical cases in high-density areas first.';
+    }
+
+    try {
+      final model = GenerativeModel(
+        model: 'gemini-1.5-flash',
+        apiKey: _apiKey,
+      );
+
+      final reportSummaries = openReports.map((r) =>
+        'Type: ${r['type']}, Urgency: ${r['urgency']}, Location: ${r['location']}'
+      ).join(' | ');
+
+      final prompt = '''You are an NGO operations AI. Analyze these ${openReports.length} active field incident reports and generate a 2-3 sentence STRATEGIC SITUATION BRIEF for the operations commander.
+
+Reports: $reportSummaries
+Available Volunteers: $volunteerCount
+
+Be specific about patterns you see (e.g., what % are medical vs food, which areas are hotspots). End with one actionable recommendation. Keep it under 80 words. Do NOT use markdown.''';
+
+      final response = await model.generateContent([Content.text(prompt)]);
+      return response.text ?? 'Unable to generate summary.';
+    } catch (e) {
+      print("Gemini Summary Error: $e");
+      return 'SUMMARY: ${openReports.length} active incidents detected. $volunteerCount volunteers on standby. Manual review recommended.';
+    }
+  }
+
   // ─────────── LEGACY: Simple Synergy (kept for backward compat) ───────────
   static Future<Map<String, dynamic>> calculateSynergy(Map<String, dynamic> volunteer, Map<String, dynamic> report) async {
     final scores = computeLocalScore(volunteer, report);

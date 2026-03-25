@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
@@ -227,6 +228,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
         'urgency': _aiUrgency,
         'status': 'Open',
         'source': 'Field Worker',
+        'submittedBy': FirebaseAuth.instance.currentUser?.uid,
         'timestamp': FieldValue.serverTimestamp(),
       });
     } catch (e) {

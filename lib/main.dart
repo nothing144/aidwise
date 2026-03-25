@@ -5,7 +5,7 @@ import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/admin_hub_screen.dart';
-import 'screens/ai_scanner_screen.dart';
+import 'screens/field_worker_hub.dart';
 import 'screens/volunteer_dashboard_screen.dart';
 import 'services/auth_service.dart';
 
@@ -84,7 +84,7 @@ class AuthWrapper extends StatelessWidget {
 
               final role = roleSnapshot.data;
               if (role == 'Admin / NGO') return const AdminHubScreen();
-              if (role == 'Field Worker') return const AIScannerScreen();
+              if (role == 'Field Worker') return const FieldWorkerHub();
               if (role == 'Volunteer') return const VolunteerDashboardScreen();
               
               // Fallback if role is null or unrecognized (migrated user without role)
