@@ -231,8 +231,7 @@ class _HeatmapDashboardState extends State<HeatmapDashboard> {
       width: double.infinity,
       decoration: BoxDecoration(
         color: AppTheme.surface.withValues(alpha: 0.95),
-        borderRadius: const BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
-        border: const Border(top: BorderSide(color: AppTheme.primary, width: 2)),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
       ),
       padding: const EdgeInsets.all(24.0),
       child: Column(

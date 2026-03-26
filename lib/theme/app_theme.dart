@@ -115,7 +115,6 @@ class AppTheme {
 
   static BoxDecoration stitchCardWithLeftBorder(Color color) => BoxDecoration(
     color: cardSurface.withValues(alpha: 0.6),
-    borderRadius: BorderRadius.circular(12),
     border: Border(
       left: BorderSide(color: color, width: 3), 
       top: BorderSide(color: outlineVariant.withValues(alpha: 0.1)), 

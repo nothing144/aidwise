@@ -144,7 +144,7 @@ class _MyReportsScreenState extends State<MyReportsScreen> {
                 decoration: BoxDecoration(
                   color: AppTheme.surface.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border(left: BorderSide(color: statusColor, width: 4)),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

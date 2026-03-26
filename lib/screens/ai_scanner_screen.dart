@@ -460,7 +460,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
         borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-        border: const Border(top: BorderSide(color: AppTheme.primary, width: 1)),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3), width: 1),
         boxShadow: [
           BoxShadow(color: AppTheme.primary.withValues(alpha: 0.1), blurRadius: 30, offset: const Offset(0, -5))
         ],
@@ -537,7 +537,11 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: AppTheme.stitchCardWithLeftBorder(accent),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withValues(alpha: 0.3), width: 1),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -546,8 +550,14 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
           Row(
             children: [
               Icon(icon, color: accent, size: 20),
-              const SizedBox(width: 8),
-              Text(value, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(value, style: const TextStyle(
+                  color: Colors.white, 
+                  fontWeight: FontWeight.w900, 
+                  fontSize: 16,
+                )),
+              ),
             ],
           )
         ],
