@@ -112,6 +112,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
 
     try {
       final aiResult = await AIService.analyzeFieldReport(textInput: inputForAI, imageBytes: imgBytes);
+      debugPrint('AI Result: $aiResult');
       if (mounted) {
         setState(() {
           _aiUrgency = aiResult['urgency'] ?? 'High';
@@ -125,6 +126,24 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
 
     if (mounted) {
       _controller.stop();
+      
+      // Block irrelevant images from proceeding
+      if (_aiType == 'Irrelevant' || _aiUrgency == 'None') {
+        setState(() {
+          _isScanning = false;
+          _isExtracting = false;
+          _showSuccess = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ AI detected this is NOT an emergency. Please upload a valid incident photo or description.'),
+            backgroundColor: Colors.redAccent,
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+      
       setState(() {
         _isScanning = false;
         _isExtracting = true;
@@ -222,6 +241,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
 
       await FirebaseFirestore.instance.collection('reports').add({
         'type': _aiType,
+        'description': _manualController.text.trim(),
         'location': locText,
         'latitude': lat,
         'longitude': lng,

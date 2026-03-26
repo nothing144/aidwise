@@ -97,10 +97,10 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
         'status': 'Completed'
       });
 
-      // 2. Mark Report as Resolved (Removes it from the global heatmap if it wasn't already)
+      // 2. Mark Report as 'Completed' (awaiting Field Worker verification to become 'Resolved')
       if (widget.reportId != null) {
         await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).update({
-          'status': 'Resolved'
+          'status': 'Completed'
         });
       }
 
@@ -109,7 +109,7 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.primary,
-            content: const Text('MISSION ACCOMPLISHED! Excellent work.', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            content: const Text('MISSION ACCOMPLISHED! Awaiting field verification.', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
             behavior: SnackBarBehavior.floating,
           )
         );

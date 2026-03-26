@@ -3,8 +3,47 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_theme.dart';
 
-class MyReportsScreen extends StatelessWidget {
+class MyReportsScreen extends StatefulWidget {
   const MyReportsScreen({super.key});
+
+  @override
+  State<MyReportsScreen> createState() => _MyReportsScreenState();
+}
+
+class _MyReportsScreenState extends State<MyReportsScreen> {
+
+  Future<void> _verifyReport(String reportId) async {
+    try {
+      // 1. Mark the report as Resolved (Field Worker verified)
+      await FirebaseFirestore.instance.collection('reports').doc(reportId).update({
+        'status': 'Resolved',
+      });
+
+      // 2. Also update any linked mission to 'Verified'
+      final missionSnap = await FirebaseFirestore.instance
+          .collection('missions')
+          .where('reportId', isEqualTo: reportId)
+          .get();
+      for (var doc in missionSnap.docs) {
+        await doc.reference.update({'status': 'Verified'});
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Report verified and resolved! Thank you.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,9 +64,11 @@ class MyReportsScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection('reports')
             .where('submittedBy', isEqualTo: uid)
-            .orderBy('timestamp', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
+          }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
           }
@@ -47,11 +88,22 @@ class MyReportsScreen extends StatelessWidget {
             );
           }
 
+          // Sort locally (newest first) to avoid Firestore composite index
+          var docs = snapshot.data!.docs.toList();
+          docs.sort((a, b) {
+            Timestamp? tsA = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+            Timestamp? tsB = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+            if (tsA == null && tsB == null) return 0;
+            if (tsA == null) return 1;
+            if (tsB == null) return -1;
+            return tsB.compareTo(tsA);
+          });
+
           return ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: snapshot.data!.docs.length,
+            itemCount: docs.length,
             itemBuilder: (context, index) {
-              final doc = snapshot.data!.docs[index];
+              final doc = docs[index];
               final data = doc.data() as Map<String, dynamic>;
               
               String status = data['status'] ?? 'Open';
@@ -68,6 +120,10 @@ class MyReportsScreen extends StatelessWidget {
                 case 'Resolved':
                   statusColor = AppTheme.urgencyLow;
                   statusIcon = Icons.check_circle;
+                  break;
+                case 'Completed':
+                  statusColor = Colors.orangeAccent;
+                  statusIcon = Icons.hourglass_top;
                   break;
                 case 'Assigned':
                   statusColor = AppTheme.secondary;
@@ -159,14 +215,60 @@ class MyReportsScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: AppTheme.urgencyLow.withValues(alpha: 0.3)),
                           ),
-                          child: Row(
+                          child: const Row(
                             children: [
-                              const Icon(Icons.verified, color: AppTheme.urgencyLow, size: 16),
-                              const SizedBox(width: 8),
-                              const Expanded(
+                              Icon(Icons.verified, color: AppTheme.urgencyLow, size: 16),
+                              SizedBox(width: 8),
+                              Expanded(
                                 child: Text(
-                                  '✅ A volunteer has resolved this report!',
+                                  '✅ Verified & Resolved! Mission complete.',
                                   style: TextStyle(color: AppTheme.urgencyLow, fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                    // COMPLETED: Awaiting Field Worker Verification
+                    if (status == 'Completed')
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.orangeAccent.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.3)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.hourglass_top, color: Colors.orangeAccent, size: 16),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '⏳ Volunteer marked complete. Please verify!',
+                                      style: TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _verifyReport(doc.id),
+                                  icon: const Icon(Icons.verified, size: 16),
+                                  label: const Text('VERIFY & RESOLVE', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.success,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                  ),
                                 ),
                               ),
                             ],
@@ -184,11 +286,11 @@ class MyReportsScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.3)),
                           ),
-                          child: Row(
+                          child: const Row(
                             children: [
-                              const Icon(Icons.person_search, color: AppTheme.secondary, size: 16),
-                              const SizedBox(width: 8),
-                              const Expanded(
+                              Icon(Icons.person_search, color: AppTheme.secondary, size: 16),
+                              SizedBox(width: 8),
+                              Expanded(
                                 child: Text(
                                   '🚀 A volunteer has been dispatched!',
                                   style: TextStyle(color: AppTheme.secondary, fontSize: 12, fontWeight: FontWeight.w600),

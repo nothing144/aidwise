@@ -10,8 +10,11 @@ class AdminMissionsTab extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('missions').orderBy('timestamp', descending: true).snapshots(),
+        stream: FirebaseFirestore.instance.collection('missions').snapshots(),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Error loading missions: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
+          }
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
 
           var missions = snapshot.data!.docs;
@@ -19,20 +22,45 @@ class AdminMissionsTab extends StatelessWidget {
             return const Center(child: Text('No active or previous missions.', style: TextStyle(color: AppTheme.textSecondary)));
           }
 
+          // Sort locally to avoid needing a Firestore composite index
+          missions.sort((a, b) {
+            Timestamp? tsA = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+            Timestamp? tsB = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+            if (tsA == null && tsB == null) return 0;
+            if (tsA == null) return 1;
+            if (tsB == null) return -1;
+            return tsB.compareTo(tsA); // descending
+          });
+
           return ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 16),
             itemCount: missions.length,
             itemBuilder: (context, index) {
               var doc = missions[index];
               var data = doc.data() as Map<String, dynamic>;
-              bool isCompleted = data['status'] == 'Completed';
+              String status = data['status'] ?? 'Pending';
+              bool isCompleted = status == 'Completed';
+              bool isVerified = status == 'Verified';
+
+              Color statusColor = isVerified ? AppTheme.success 
+                  : isCompleted ? Colors.orangeAccent 
+                  : AppTheme.secondary;
+              String statusText = status.toUpperCase();
 
               return Card(
                 color: AppTheme.surface.withValues(alpha: 0.5),
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                shape: Border(left: BorderSide(color: isCompleted ? AppTheme.success : AppTheme.secondary, width: 4)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: statusColor.withValues(alpha: 0.3)),
+                ),
                 child: ListTile(
                   contentPadding: const EdgeInsets.all(16),
+                  leading: Container(
+                    width: 4,
+                    height: double.infinity,
+                    color: statusColor,
+                  ),
                   title: Text(data['title'] ?? 'Mission', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 8.0),
@@ -41,18 +69,18 @@ class AdminMissionsTab extends StatelessWidget {
                       children: [
                         Text(data['location'] ?? 'Unknown Area', style: const TextStyle(color: AppTheme.textSecondary)),
                         const SizedBox(height: 4),
-                        Text('Assigned Vol: ${data['assignedVolunteerId']}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                        Text('Match Score: ${data['matchScore'] ?? 'N/A'}%', style: TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
                   trailing: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isCompleted ? AppTheme.success.withValues(alpha: 0.1) : AppTheme.secondary.withValues(alpha: 0.1),
+                      color: statusColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: isCompleted ? AppTheme.success : AppTheme.secondary),
+                      border: Border.all(color: statusColor),
                     ),
-                    child: Text(data['status']?.toUpperCase() ?? 'PENDING', style: TextStyle(color: isCompleted ? AppTheme.success : AppTheme.secondary, fontWeight: FontWeight.bold, fontSize: 10)),
+                    child: Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10)),
                   ),
                 ),
               );
