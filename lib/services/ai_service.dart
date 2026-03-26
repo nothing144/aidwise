@@ -62,9 +62,9 @@ class AIService {
     } catch (e) {
       print("Gemini API Error: $e");
       return { 
-        "urgency": "None", 
-        "type": "Irrelevant", 
-        "location": "API Error - Please retry" 
+        "urgency": "Error", 
+        "type": "API_ERROR", 
+        "location": "API Connection Failed" 
       };
     }
   }

@@ -127,6 +127,23 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
     if (mounted) {
       _controller.stop();
       
+      // Block API errors and suggest manual entry
+      if (_aiType == 'API_ERROR') {
+        setState(() {
+          _isScanning = false;
+          _isExtracting = false;
+          _showSuccess = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ AI Service temporarily unavailable (Quota/Network). Please use Manual Entry below.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+
       // Block irrelevant images from proceeding
       if (_aiType == 'Irrelevant' || _aiUrgency == 'None') {
         setState(() {
