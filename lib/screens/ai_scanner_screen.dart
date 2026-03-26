@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/ai_service.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'admin_location_picker_screen.dart';
 
 class AIScannerScreen extends StatefulWidget {
@@ -127,20 +128,39 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
     if (mounted) {
       _controller.stop();
       
-      // Block API errors and suggest manual entry
+      // Block API errors and suggest manual entry with ML Kit fallback
       if (_aiType == 'API_ERROR') {
         setState(() {
           _isScanning = false;
           _isExtracting = false;
-          _showSuccess = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⚠️ AI Service temporarily unavailable (Quota/Network). Please use Manual Entry below.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 4),
-          ),
-        );
+        
+        // Attempt on-device text extraction
+        if (_imageFile != null) {
+          try {
+            final inputImage = InputImage.fromFilePath(_imageFile!.path);
+            final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+            final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+            await textRecognizer.close();
+            
+            if (recognizedText.text.isNotEmpty) {
+              _manualController.text = recognizedText.text.trim();
+            }
+          } catch (e) {
+            debugPrint("ML Kit Error: $e");
+          }
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ AI Offline. Extracting text locally & opening Manual Entry.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+          _showManualEntryDialog();
+        }
         return;
       }
 

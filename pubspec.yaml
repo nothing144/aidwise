@@ -45,6 +45,7 @@ dependencies:
   geocoding: ^4.0.0
   google_generative_ai: ^0.4.7
   fl_chart: ^1.2.0
+  google_mlkit_text_recognition: ^0.15.1
 
 dev_dependencies:
   flutter_test:

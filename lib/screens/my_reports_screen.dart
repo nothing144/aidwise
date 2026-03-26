@@ -204,6 +204,12 @@ class _MyReportsScreenState extends State<MyReportsScreen> {
                     // Time ago
                     Text(timeAgo, style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6), fontSize: 11)),
                     
+                    if (data['description'] != null && data['description'].toString().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+                        child: Text('"${data['description']}"', style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic, fontSize: 13)),
+                      ),
+                    
                     // Resolved celebration
                     if (status == 'Resolved')
                       Padding(

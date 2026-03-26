@@ -125,6 +125,8 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
       double latitude = 28.6139;
       double longitude = 77.2090;
 
+      String description = '';
+
       if (widget.reportId != null) {
         final reportDoc = await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).get();
         if (reportDoc.exists) {
@@ -132,6 +134,7 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
           need = reportDoc.data()?['type'] ?? need;
           latitude = reportDoc.data()?['latitude'] ?? latitude;
           longitude = reportDoc.data()?['longitude'] ?? longitude;
+          description = reportDoc.data()?['description'] ?? '';
         }
       }
 
@@ -140,6 +143,7 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
         'location': location,
         'latitude': latitude,
         'longitude': longitude,
+        'description': description,
         'assignedVolunteerId': selectedVol['id'],
         'status': 'Pending',
         'reportId': widget.reportId,

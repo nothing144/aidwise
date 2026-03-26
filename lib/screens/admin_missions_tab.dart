@@ -69,6 +69,11 @@ class AdminMissionsTab extends StatelessWidget {
                       children: [
                         Text(data['location'] ?? 'Unknown Area', style: const TextStyle(color: AppTheme.textSecondary)),
                         const SizedBox(height: 4),
+                        if (data['description'] != null && data['description'].toString().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6.0),
+                            child: Text('"${data['description']}"', style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic, fontSize: 13)),
+                          ),
                         Text('Match Score: ${data['matchScore'] ?? 'N/A'}%', style: TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.bold)),
                       ],
                     ),
