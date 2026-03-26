@@ -15,7 +15,19 @@ class _VolunteerOnboardingScreenState extends State<VolunteerOnboardingScreen> {
   final Set<String> _selectedSkills = {};
   final TextEditingController _vehicleController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _customSkillController = TextEditingController();
   bool _isSaving = false;
+
+  void _addCustomSkill() {
+    final skill = _customSkillController.text.trim();
+    if (skill.isNotEmpty && !_skills.contains(skill)) {
+      setState(() {
+        _skills.add(skill);
+        _selectedSkills.add(skill);
+        _customSkillController.clear();
+      });
+    }
+  }
 
   Future<void> _completeOnboarding() async {
     if (_selectedSkills.isEmpty) {
@@ -100,7 +112,21 @@ class _VolunteerOnboardingScreenState extends State<VolunteerOnboardingScreen> {
               }).toList(),
             ),
             
-            const SizedBox(height: 64),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTextField('Add Custom Skill (e.g. Drone Pilot)', Icons.add_circle_outline, _customSkillController),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.add_box, color: AppTheme.primary, size: 40),
+                  onPressed: _addCustomSkill,
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 48),
             SizedBox(
               width: double.infinity,
               height: 56,

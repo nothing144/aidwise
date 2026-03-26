@@ -35,7 +35,14 @@ class VolunteerDashboardScreen extends StatelessWidget {
                     StreamBuilder<DocumentSnapshot>(
                       stream: FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser?.uid).snapshots(),
                       builder: (ctx, snap) {
-                        String name = snap.data?.get('displayName') ?? 'Volunteer';
+                        if (snap.hasError) return const Text('Hello, Volunteer', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white));
+                        if (snap.connectionState == ConnectionState.waiting) return const Text('Loading...', style: TextStyle(color: Colors.white70));
+                        
+                        String name = 'Volunteer';
+                        if (snap.hasData && snap.data!.exists && snap.data!.data() != null) {
+                          final data = snap.data!.data() as Map<String, dynamic>;
+                          name = data.containsKey('displayName') ? data['displayName'] : 'Volunteer';
+                        }
                         return Text('Hello, $name', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white));
                       },
                     ),
