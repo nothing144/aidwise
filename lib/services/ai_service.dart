@@ -38,7 +38,7 @@ class AIService {
     
     try {
       final model = GenerativeModel(
-        model: 'gemini-1.5-flash', 
+        model: 'gemini-2.0-flash', 
         apiKey: _apiKey,
         generationConfig: GenerationConfig(responseMimeType: 'application/json')
       );
@@ -62,9 +62,9 @@ class AIService {
     } catch (e) {
       print("Gemini API Error: $e");
       return { 
-        "urgency": "Medium", 
-        "type": "General Incident", 
-        "location": "Unknown Error" 
+        "urgency": "None", 
+        "type": "Irrelevant", 
+        "location": "API Error - Please retry" 
       };
     }
   }
@@ -178,7 +178,7 @@ class AIService {
     
     try {
       final model = GenerativeModel(
-        model: 'gemini-1.5-flash', 
+        model: 'gemini-2.0-flash', 
         apiKey: _apiKey,
         generationConfig: GenerationConfig(responseMimeType: 'application/json')
       );
