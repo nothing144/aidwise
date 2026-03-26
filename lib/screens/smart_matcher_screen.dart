@@ -144,7 +144,7 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
         'status': 'Pending',
         'reportId': widget.reportId,
         'matchScore': selectedVol['scores']['total_score'],
-        'createdAt': FieldValue.serverTimestamp(),
+        'timestamp': FieldValue.serverTimestamp(),
       });
 
       if (widget.reportId != null) {

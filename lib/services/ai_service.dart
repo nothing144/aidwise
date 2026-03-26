@@ -7,7 +7,7 @@ class AIService {
   // Master Switch: false = 0 cost/fast testing, true = real Gemini API calls
   static const bool isLiveMode = true; 
 
-  static const String _apiKey = ""; 
+  static const String _apiKey = "AIzaSyA5zfFBETmHyBQgozYaNT_xkL3tj9PVjlI"; 
 
   // ─────────────────────────── SKILL TAXONOMY ───────────────────────────
   // Maps report "type" keywords to relevant volunteer skills.
@@ -43,7 +43,9 @@ class AIService {
         generationConfig: GenerationConfig(responseMimeType: 'application/json')
       );
       
-      final promptString = 'Analyze this NGO field incident report. If there is an image, describe the emergency visible. If there is text, use it too. Text provided: "${textInput ?? 'None'}". Return a strict JSON object with: 1) "urgency" (Low/Medium/High/Critical), 2) "type" (Short 2-word need type, e.g. "Medical Need", "Blood Required", "Education Support", "Food Drive", "Logistics Help", "Search Rescue", "Fire Hazard"), 3) "location" (Extracted location, or "Unknown").';
+      final promptString = 'Analyze this NGO field incident report. If there is an image, describe the emergency visible. If there is text, use it too. Text provided: "${textInput ?? 'None'}". '
+      'CRITICAL: If the image does NOT depict an emergency, disaster, or relevant NGO incident (e.g. it is a normal selfie, meme, random object, normal scenery), you MUST return "type": "Irrelevant" and "urgency": "None" and "location": "Unknown". '
+      'If it IS an emergency, return a strict JSON object with: 1) "urgency" (Low/Medium/High/Critical), 2) "type" (Short 2-word need type, e.g. "Medical Need", "Blood Required", "Education Support", "Food Drive", "Logistics Help", "Search Rescue", "Fire Hazard"), 3) "location" (Extracted location, or "Unknown").';
       
       late GenerateContentResponse response;
       if (imageBytes != null) {

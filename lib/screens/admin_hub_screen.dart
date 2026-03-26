@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import 'heatmap_dashboard.dart';
 import 'admin_reports_tab.dart';
 import 'admin_missions_tab.dart';
+import 'analytics_dashboard_tab.dart';
 import '../services/auth_service.dart';
 
 class AdminHubScreen extends StatefulWidget {
@@ -18,6 +19,7 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
   final List<Widget> _pages = [
     const MergedInboxTab(),
     const AdminMissionsTab(),
+    const AnalyticsDashboardTab(),
   ];
 
   @override
@@ -64,6 +66,7 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.all_inbox), label: 'Inboxes'),
           BottomNavigationBarItem(icon: Icon(Icons.rocket_launch), label: 'Missions'),
+          BottomNavigationBarItem(icon: Icon(Icons.analytics), label: 'Insights'),
         ],
       ),
     );
