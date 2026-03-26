@@ -23,6 +23,11 @@ class AIService {
     'rescue':      ['Search & Rescue', 'Medical Provider'],
     'counselling': ['Counselling', 'Teacher / Tutor'],
     'it':          ['IT Support', 'Teacher / Tutor'],
+    'animal':      ['Animal Welfare', 'Veterinary', 'Search & Rescue'],
+    'clothing':    ['Clothing Drive', 'Logistics & Transport'],
+    'sanitation':  ['Sanitation & Hygiene', 'Labor Support'],
+    'shelter':     ['Shelter Management', 'Logistics & Transport'],
+    'elderly':     ['Elderly Care', 'Medical Provider', 'Counselling'],
   };
 
   // ─────────────────────── FIELD REPORT ANALYZER ───────────────────────
