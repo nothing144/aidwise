@@ -55,11 +55,28 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
         return;
       }
 
-      // 3. Compute local scores for each volunteer
-      List<Map<String, dynamic>> scoredVolunteers = [];
+      // 2.5 Batch-run Custom Hugging Face Sentence Transformer Model
+      List<String> volunteerSentences = [];
       for (var doc in volSnapshot.docs) {
         final volData = doc.data();
-        final scores = AIService.computeLocalScore(volData, _reportData);
+        List<String> skills = List<String>.from(volData['skills'] ?? []);
+        String sentence = skills.isEmpty ? 'Volunteer without specific skills.' : 'Volunteer skilled in: ${skills.join(', ')}';
+        volunteerSentences.add(sentence);
+      }
+      
+      List<double> hfScores = await AIService.batchComputeHFSkillScores(widget.need, volunteerSentences);
+
+      // 3. Compute combined scores (HF Skills + Local Distance + Local Vehicle)
+      List<Map<String, dynamic>> scoredVolunteers = [];
+      for (int i = 0; i < volSnapshot.docs.length; i++) {
+        final doc = volSnapshot.docs[i];
+        final volData = doc.data();
+        
+        final scores = AIService.computeLocalScore(
+          volData, 
+          _reportData,
+          injectedSkillScore: hfScores[i]
+        );
         
         scoredVolunteers.add({
           'id': doc.id,

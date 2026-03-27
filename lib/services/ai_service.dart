@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:http/http.dart' as http;
 
 class AIService {
   // Master Switch: false = 0 cost/fast testing, true = real Gemini API calls
@@ -74,14 +75,52 @@ class AIService {
     }
   }
 
-  // ───────── MULTI-FACTOR SCORING ENGINE (Local ML-style) ─────────
-  /// Computes a weighted composite score for a single volunteer against a report.
-  /// Returns a Map with individual factor scores + total.
+  // ───────── MULTI-FACTOR SCORING ENGINE (Local ML + HF Sentence Transformer) ─────────
+
+  static const String _hfToken = "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";
+  static const String _hfEndpoint = "https://api-inference.huggingface.co/models/wtfharsh144Pandey/aidwise";
+
+  /// Batch computes semantic skill similarity scores using the custom Hugging Face trained model.
+  static Future<List<double>> batchComputeHFSkillScores(String need, List<String> volunteerSkillSentences) async {
+    if (!isLiveMode || volunteerSkillSentences.isEmpty) {
+      return List.filled(volunteerSkillSentences.length, 0.8);
+    }
+    
+    try {
+      final response = await http.post(
+        Uri.parse(_hfEndpoint),
+        headers: {
+          'Authorization': 'Bearer $_hfToken',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          "inputs": {
+            "source_sentence": need,
+            "sentences": volunteerSkillSentences
+          }
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonResp = jsonDecode(response.body);
+        return jsonResp.map((e) => (e as num).toDouble()).toList();
+      } else {
+        print("HF API Error: ${response.statusCode} - ${response.body}");
+        return List.filled(volunteerSkillSentences.length, 0.5); // Fallback
+      }
+    } catch (e) {
+      print("HF Network Error: $e");
+      return List.filled(volunteerSkillSentences.length, 0.5); // Fallback
+    }
+  }
+
+  /// Computes a weighted composite score. Allows injecting the HF-computed skillScore.
   static Map<String, dynamic> computeLocalScore(
     Map<String, dynamic> volunteer,
     Map<String, dynamic> report,
+    {double? injectedSkillScore}
   ) {
-    double skillScore = _computeSkillScore(volunteer, report);
+    double skillScore = injectedSkillScore ?? _computeSkillScore(volunteer, report);
     double distanceScore = _computeDistanceScore(volunteer, report);
     double availabilityScore = _computeAvailabilityScore(volunteer);
 
