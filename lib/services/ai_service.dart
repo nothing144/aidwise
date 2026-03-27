@@ -78,7 +78,7 @@ class AIService {
   // ───────── MULTI-FACTOR SCORING ENGINE (Local ML + HF Sentence Transformer) ─────────
 
   static const String _hfToken = "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";
-  static const String _hfEndpoint = "https://api-inference.huggingface.co/models/wtfharsh144Pandey/aidwise";
+  static const String _hfEndpoint = "https://router.huggingface.co/hf-inference/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2";
 
   /// Batch computes semantic skill similarity scores using the custom Hugging Face trained model.
   static Future<List<double>> batchComputeHFSkillScores(String need, List<String> volunteerSkillSentences) async {
@@ -86,32 +86,43 @@ class AIService {
       return List.filled(volunteerSkillSentences.length, 0.8);
     }
     
-    try {
-      final response = await http.post(
-        Uri.parse(_hfEndpoint),
-        headers: {
-          'Authorization': 'Bearer $_hfToken',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          "inputs": {
-            "source_sentence": need,
-            "sentences": volunteerSkillSentences
-          }
-        }),
-      );
+    int retries = 0;
+    while (retries < 3) {
+      try {
+        final response = await http.post(
+          Uri.parse(_hfEndpoint),
+          headers: {
+            'Authorization': 'Bearer $_hfToken',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            "inputs": {
+              "source_sentence": need,
+              "sentences": volunteerSkillSentences
+            }
+          }),
+        );
 
-      if (response.statusCode == 200) {
-        final List<dynamic> jsonResp = jsonDecode(response.body);
-        return jsonResp.map((e) => (e as num).toDouble()).toList();
-      } else {
-        print("HF API Error: ${response.statusCode} - ${response.body}");
+        if (response.statusCode == 200) {
+          final List<dynamic> jsonResp = jsonDecode(response.body);
+          return jsonResp.map((e) => (e as num).toDouble()).toList();
+        } else if (response.statusCode == 503) {
+          // Model is loading (Cold Start)
+          final errorBody = jsonDecode(response.body);
+          double waitTime = (errorBody['estimated_time'] ?? 20.0).toDouble();
+          print("HF Model Cold Start. Waiting ${waitTime}s...");
+          await Future.delayed(Duration(seconds: waitTime.ceil()));
+          retries++;
+        } else {
+          print("HF API Error: ${response.statusCode} - ${response.body}");
+          return List.filled(volunteerSkillSentences.length, 0.5); // Fallback
+        }
+      } catch (e) {
+        print("HF Network Error: $e");
         return List.filled(volunteerSkillSentences.length, 0.5); // Fallback
       }
-    } catch (e) {
-      print("HF Network Error: $e");
-      return List.filled(volunteerSkillSentences.length, 0.5); // Fallback
     }
+    return List.filled(volunteerSkillSentences.length, 0.5); 
   }
 
   /// Computes a weighted composite score. Allows injecting the HF-computed skillScore.
