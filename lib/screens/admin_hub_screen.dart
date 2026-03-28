@@ -4,6 +4,7 @@ import 'heatmap_dashboard.dart';
 import 'admin_reports_tab.dart';
 import 'admin_missions_tab.dart';
 import 'analytics_dashboard_tab.dart';
+import 'data_vault_tab.dart';
 import '../services/auth_service.dart';
 
 class AdminHubScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
     const MergedInboxTab(),
     const AdminMissionsTab(),
     const AnalyticsDashboardTab(),
+    const DataVaultTab(),
   ];
 
   @override
@@ -53,10 +55,11 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
       ),
       body: _pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: AppTheme.background, // Match obsidian
+        backgroundColor: AppTheme.background,
         selectedItemColor: AppTheme.primary,
         unselectedItemColor: AppTheme.textSecondary,
         elevation: 20,
+        type: BottomNavigationBarType.fixed,
         currentIndex: _currentIndex,
         onTap: (index) {
           setState(() {
@@ -67,6 +70,7 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.all_inbox), label: 'Inboxes'),
           BottomNavigationBarItem(icon: Icon(Icons.rocket_launch), label: 'Missions'),
           BottomNavigationBarItem(icon: Icon(Icons.analytics), label: 'Insights'),
+          BottomNavigationBarItem(icon: Icon(Icons.storage), label: 'Data Vault'),
         ],
       ),
     );
