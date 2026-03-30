@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/ai_service.dart';
+import '../services/offline_sync_service.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'admin_location_picker_screen.dart';
 
@@ -276,7 +277,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
         locText = 'GPS: ${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
       }
 
-      await FirebaseFirestore.instance.collection('reports').add({
+      final reportData = {
         'type': _aiType,
         'description': _manualController.text.trim(),
         'location': locText,
@@ -286,8 +287,36 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
         'status': 'Open',
         'source': 'Field Worker',
         'submittedBy': FirebaseAuth.instance.currentUser?.uid,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
+      };
+
+      // Try online Firestore first. If no internet, queue offline for P2P mesh.
+      bool isOnline = await OfflineSyncService.hasInternet();
+      if (isOnline) {
+        try {
+          await FirebaseFirestore.instance.collection('reports').add({
+            ...reportData,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+        } catch (e) {
+          // Firestore failed even with internet — queue offline
+          await OfflineSyncService().queueReportOffline(reportData);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('\u{1F4E1} Saved offline. Go to Mesh Sync to transfer via Bluetooth.'),
+              backgroundColor: Colors.orangeAccent,
+            ));
+          }
+        }
+      } else {
+        // No internet — queue for P2P mesh transfer
+        await OfflineSyncService().queueReportOffline(reportData);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('\u{1F4E1} No internet. Report saved offline for Bluetooth sync.'),
+            backgroundColor: Colors.orangeAccent,
+          ));
+        }
+      }
     } catch (e) {
       debugPrint('Error saving report: $e');
     }

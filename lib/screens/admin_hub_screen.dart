@@ -6,6 +6,8 @@ import 'admin_missions_tab.dart';
 import 'analytics_dashboard_tab.dart';
 import 'data_vault_tab.dart';
 import '../services/auth_service.dart';
+import '../services/offline_sync_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class AdminHubScreen extends StatefulWidget {
   const AdminHubScreen({super.key});
@@ -16,6 +18,33 @@ class AdminHubScreen extends StatefulWidget {
 
 class _AdminHubScreenState extends State<AdminHubScreen> {
   int _currentIndex = 0;
+  final OfflineSyncService _syncService = OfflineSyncService();
+
+  @override
+  void initState() {
+    super.initState();
+    _initMeshAdvertising();
+  }
+
+  Future<void> _initMeshAdvertising() async {
+    await _syncService.init(userName: 'AdminHQ', role: 'Admin');
+    // Request permissions then auto-advertise
+    await [
+      Permission.location,
+      Permission.bluetooth,
+      Permission.bluetoothAdvertise,
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+      Permission.nearbyWifiDevices,
+    ].request();
+    await _syncService.startAdvertising();
+  }
+
+  @override
+  void dispose() {
+    _syncService.stopAdvertising();
+    super.dispose();
+  }
 
   final List<Widget> _pages = [
     const MergedInboxTab(),
@@ -47,6 +76,30 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
         elevation: 0,
         centerTitle: true,
         actions: [
+          // Mesh Status Indicator
+          ValueListenableBuilder<bool>(
+            valueListenable: _syncService.isAdvertising,
+            builder: (context, isAdv, _) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: IconButton(
+                  icon: Icon(
+                    isAdv ? Icons.cell_tower : Icons.bluetooth_disabled,
+                    color: isAdv ? Colors.green : AppTheme.textSecondary,
+                    size: 20,
+                  ),
+                  tooltip: isAdv ? 'Mesh: Broadcasting' : 'Mesh: Offline',
+                  onPressed: () {
+                    if (isAdv) {
+                      _syncService.stopAdvertising();
+                    } else {
+                      _syncService.startAdvertising();
+                    }
+                  },
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout, color: AppTheme.textSecondary, size: 20),
             onPressed: () => AuthService().signOut(),
