@@ -5,6 +5,7 @@ import 'admin_reports_tab.dart';
 import 'admin_missions_tab.dart';
 import 'analytics_dashboard_tab.dart';
 import 'data_vault_tab.dart';
+import 'admin_mesh_inbox_screen.dart';
 import '../services/auth_service.dart';
 import '../services/offline_sync_service.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -136,7 +137,7 @@ class MergedInboxTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
           TabBar(
@@ -145,10 +146,11 @@ class MergedInboxTab extends StatelessWidget {
             unselectedLabelColor: AppTheme.textSecondary,
             dividerColor: Colors.transparent,
             indicatorWeight: 3,
-            labelStyle: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            labelStyle: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2, fontSize: 11),
             tabs: const [
               Tab(text: 'AI FIELD REPORTS'),
               Tab(text: 'OFFICE MANUAL'),
+              Tab(text: 'P2P MESH'),
             ],
           ),
           const SizedBox(height: 10),
@@ -157,6 +159,7 @@ class MergedInboxTab extends StatelessWidget {
               children: [
                 HeatmapDashboard(showAppBar: false),
                 AdminReportsTab(),
+                AdminMeshInboxScreen(),
               ],
             ),
           ),
