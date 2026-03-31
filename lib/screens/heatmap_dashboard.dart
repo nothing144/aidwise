@@ -320,8 +320,11 @@ class _HeatmapDashboardState extends State<HeatmapDashboard> {
                             children: [
                               const Icon(Icons.share_location, color: AppTheme.primary, size: 16),
                               const SizedBox(width: 8),
-                              Text('CLUSTER: $locKey (${clusterDocs.length} INCIDENTS)', 
-                                style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.5)
+                              Flexible(
+                                child: Text('CLUSTER: $locKey', 
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.5)
+                                ),
                               ),
                             ],
                           ),
@@ -380,25 +383,27 @@ class _HeatmapDashboardState extends State<HeatmapDashboard> {
             padding: const EdgeInsets.all(16),
             decoration: AppTheme.stitchCardWithLeftBorder(urgencyColor),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 8, height: 8,
-                      decoration: BoxDecoration(color: urgencyColor, shape: BoxShape.circle, boxShadow: [BoxShadow(color: urgencyColor, blurRadius: 5)]),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(location, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text('Need: $need', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-              ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 8, height: 8,
+                        decoration: BoxDecoration(color: urgencyColor, shape: BoxShape.circle, boxShadow: [BoxShadow(color: urgencyColor, blurRadius: 5)]),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(child: Text(location, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Need: $need', overflow: TextOverflow.ellipsis, style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                ],
+              ),
             ),
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
