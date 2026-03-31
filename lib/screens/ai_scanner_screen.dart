@@ -337,14 +337,31 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Live Camera Simulation
+          // Live Camera Simulation (offline-safe)
           Positioned.fill(
             child: Opacity(
               opacity: _isExtracting || _showSuccess ? 0.3 : 0.8,
-              child: Image.network(
-                'https://images.unsplash.com/photo-1607316377884-bbd758c0c8ff?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey[900]),
+              child: FutureBuilder<bool>(
+                future: OfflineSyncService.hasInternet(),
+                builder: (context, snap) {
+                  if (snap.data == true) {
+                    return Image.network(
+                      'https://images.unsplash.com/photo-1607316377884-bbd758c0c8ff?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey[900]),
+                    );
+                  }
+                  // Offline: show dark gradient immediately (no network wait)
+                  return Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.grey[900]!, Colors.black],
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -379,26 +396,32 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
               onPressed: () => Navigator.pop(context),
             )
           else
-            const SizedBox(width: 48), // Spacer to balance the layout
+            const SizedBox(width: 48),
 
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.surface.withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.auto_awesome, color: AppTheme.primary, size: 16),
-                const SizedBox(width: 8),
-                Text('AI FIELD SCANNER', style: TextStyle(
-                  color: AppTheme.primary,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                  shadows: [Shadow(color: AppTheme.primary.withValues(alpha: 0.5), blurRadius: 10)]
-                )),
-              ],
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.surface.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.auto_awesome, color: AppTheme.primary, size: 16),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text('AI FIELD SCANNER', overflow: TextOverflow.ellipsis, style: TextStyle(
+                      color: AppTheme.primary,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                      fontSize: 13,
+                      shadows: [Shadow(color: AppTheme.primary.withValues(alpha: 0.5), blurRadius: 10)]
+                    )),
+                  ),
+                ],
+              ),
             ),
           ),
           IconButton(
@@ -564,10 +587,11 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
           const SizedBox(height: 20),
           Text('DETECTED TAGS', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
               _buildTag('FIELD_REPORT'),
-              const SizedBox(width: 8),
               _buildTag('GPS_VERIFIED'),
             ],
           ),

@@ -6,6 +6,7 @@ import 'admin_missions_tab.dart';
 import 'analytics_dashboard_tab.dart';
 import 'data_vault_tab.dart';
 import 'admin_mesh_inbox_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_service.dart';
 import '../services/offline_sync_service.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -39,6 +40,24 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
       Permission.nearbyWifiDevices,
     ].request();
     await _syncService.startAdvertising();
+    
+    // Silently fetch and cache active volunteers if online
+    if (await OfflineSyncService.hasInternet()) {
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('users')
+            .where('role', isEqualTo: 'Volunteer')
+            .get();
+        final volunteers = snap.docs.map((d) {
+          final data = d.data();
+          data['id'] = d.id;
+          return data;
+        }).toList();
+        await _syncService.cacheVolunteersOffline(volunteers);
+      } catch (e) {
+        debugPrint('Failed to cache volunteers: $e');
+      }
+    }
   }
 
   @override

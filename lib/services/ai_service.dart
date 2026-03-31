@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 class AIService {
   // Master Switch: false = 0 cost/fast testing, true = real Gemini API calls
@@ -66,7 +66,7 @@ class AIService {
       }
       return jsonDecode(response.text!);
     } catch (e) {
-      print("Gemini API Error: $e");
+      debugPrint("Gemini API Error: $e");
       return { 
         "urgency": "Error", 
         "type": "API_ERROR", 
@@ -110,15 +110,15 @@ class AIService {
           // Model is loading (Cold Start)
           final errorBody = jsonDecode(response.body);
           double waitTime = (errorBody['estimated_time'] ?? 20.0).toDouble();
-          print("HF Model Cold Start. Waiting ${waitTime}s...");
+          debugPrint("HF Model Cold Start. Waiting ${waitTime}s...");
           await Future.delayed(Duration(seconds: waitTime.ceil()));
           retries++;
         } else {
-          print("HF API Error: ${response.statusCode} - ${response.body}");
+          debugPrint("HF API Error: ${response.statusCode} - ${response.body}");
           return List.filled(volunteerSkillSentences.length, 0.5); // Fallback
         }
       } catch (e) {
-        print("HF Network Error: $e");
+        debugPrint("HF Network Error: $e");
         return List.filled(volunteerSkillSentences.length, 0.5); // Fallback
       }
     }
@@ -250,7 +250,7 @@ Return JSON: {"reasoning": "1 short professional sentence"}''';
       final response = await model.generateContent([Content.text(prompt)]);
       return jsonDecode(response.text!);
     } catch (e) {
-      print("Gemini Reasoning Error: $e");
+      debugPrint("Gemini Reasoning Error: $e");
       return { 
         "reasoning": "Matched based on skill relevance (${localScores['skill_score']}%) and proximity (${localScores['distance_score']}%)."
       };
@@ -291,7 +291,7 @@ Be specific about patterns you see (e.g., what % are medical vs food, which area
       final response = await model.generateContent([Content.text(prompt)]);
       return response.text ?? 'Unable to generate summary.';
     } catch (e) {
-      print("Gemini Summary Error: $e");
+      debugPrint("Gemini Summary Error: $e");
       return 'SUMMARY: ${openReports.length} active incidents detected. $volunteerCount volunteers on standby. Manual review recommended.';
     }
   }

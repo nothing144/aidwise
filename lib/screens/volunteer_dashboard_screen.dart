@@ -2,11 +2,74 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'volunteer_terminal.dart';
 import '../services/auth_service.dart';
+import '../services/offline_sync_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'volunteer_offline_mission_screen.dart';
+import 'volunteer_terminal.dart';
 
-class VolunteerDashboardScreen extends StatelessWidget {
+class VolunteerDashboardScreen extends StatefulWidget {
   const VolunteerDashboardScreen({super.key});
+
+  @override
+  State<VolunteerDashboardScreen> createState() => _VolunteerDashboardScreenState();
+}
+
+class _VolunteerDashboardScreenState extends State<VolunteerDashboardScreen> {
+  final _syncService = OfflineSyncService();
+  String? _lastHandledMeshId;
+
+  @override
+  void initState() {
+    super.initState();
+    _initMeshDiscovery();
+    _syncService.receivedMission.addListener(_onMissionReceived);
+  }
+
+  Future<void> _initMeshDiscovery() async {
+    final user = FirebaseAuth.instance.currentUser;
+    await _syncService.init(userName: user?.displayName ?? 'Volunteer', role: 'Volunteer');
+    
+    // Request permissions for Offline Mesh Navigation
+    await [
+      Permission.location,
+      Permission.bluetooth,
+      Permission.bluetoothAdvertise,
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+      Permission.nearbyWifiDevices,
+    ].request();
+    
+    // Start scanning for Admin or Mules
+    await _syncService.startDiscovery();
+  }
+
+  void _onMissionReceived() {
+    final missionData = _syncService.receivedMission.value;
+    if (missionData == null || !mounted) return;
+
+    // Prevent infinite loop: only handle each unique mission once
+    final meshId = missionData['_meshId']?.toString();
+    if (meshId == _lastHandledMeshId) return;
+    _lastHandledMeshId = meshId;
+
+    // Clear the notifier so it doesn't re-trigger on hot reload / re-listen
+    _syncService.receivedMission.value = null;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VolunteerOfflineMissionScreen(missionData: missionData),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _syncService.receivedMission.removeListener(_onMissionReceived);
+    _syncService.stopDiscovery();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

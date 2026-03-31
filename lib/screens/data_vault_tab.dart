@@ -206,7 +206,6 @@ class _DataVaultTabState extends State<DataVaultTab> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppTheme.surface.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(12),
               border: Border(
                 left: BorderSide(color: urgencyColor, width: 3),
                 top: BorderSide(color: AppTheme.primary.withValues(alpha: 0.1)),

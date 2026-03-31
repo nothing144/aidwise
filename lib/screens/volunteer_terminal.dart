@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../services/offline_sync_service.dart';
 
 class VolunteerTerminalScreen extends StatefulWidget {
   final String missionId;
@@ -115,9 +116,25 @@ class _VolunteerTerminalScreenState extends State<VolunteerTerminalScreen> {
         );
       }
     } catch (e) {
-      if (mounted) {
-        setState(() { _isCompleting = false; });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      // Firestore failed (likely offline) — fallback to mesh status update
+      debugPrint('Firestore completion failed: $e — falling back to mesh');
+      try {
+        await OfflineSyncService().sendStatusUpdateViaMesh(widget.missionId, 'Completed');
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.blueAccent,
+              content: Text('📡 Completed offline! Status broadcasting via P2P mesh.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              behavior: SnackBarBehavior.floating,
+            )
+          );
+        }
+      } catch (meshError) {
+        if (mounted) {
+          setState(() { _isCompleting = false; });
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $meshError'), backgroundColor: Colors.red));
+        }
       }
     }
   }

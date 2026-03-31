@@ -15,11 +15,15 @@ class AuthService {
     try {
       UserCredential cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
       
+      // Set displayName on Firebase Auth profile (used by mesh broadcasts)
+      await cred.user!.updateDisplayName(fullName);
+
       // Store additional user data (like role) in Firestore
       await _firestore.collection('users').doc(cred.user!.uid).set({
         'email': email,
         'role': role,
         'fullName': fullName,
+        'displayName': fullName,
         'createdAt': FieldValue.serverTimestamp(),
         'status': 'Idle',
       }).timeout(const Duration(seconds: 20), onTimeout: () {
@@ -49,18 +53,27 @@ class AuthService {
     }
   }
 
-  // Get User Role
+  // Get User Role (with retry for fresh signup race condition)
   Future<String?> getUserRole() async {
     final user = _auth.currentUser;
     if (user == null) return null;
 
     try {
-      final doc = await _firestore.collection('users').doc(user.uid).get()
-          .timeout(const Duration(seconds: 15), onTimeout: () {
-        throw Exception('Firestore read timed out');
-      });
-      if (doc.exists) {
-        return doc.data()?['role'] as String?;
+      // Retry up to 3 times — after signup, authStateChanges fires before
+      // the Firestore doc is fully written, causing a brief window where
+      // the doc doesn't exist yet.
+      for (int attempt = 0; attempt < 3; attempt++) {
+        final doc = await _firestore.collection('users').doc(user.uid).get()
+            .timeout(const Duration(seconds: 15), onTimeout: () {
+          throw Exception('Firestore read timed out');
+        });
+        if (doc.exists && doc.data()?['role'] != null) {
+          return doc.data()?['role'] as String?;
+        }
+        // Doc not ready yet — wait and retry
+        if (attempt < 2) {
+          await Future.delayed(const Duration(seconds: 1));
+        }
       }
       return null;
     } catch (e) {

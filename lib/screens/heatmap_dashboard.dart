@@ -241,12 +241,17 @@ class _HeatmapDashboardState extends State<HeatmapDashboard> {
             children: [
               const Icon(Icons.auto_awesome, color: AppTheme.primary, size: 24),
               const SizedBox(width: 10),
-              const Text('AI PRIORITY RANKINGS', style: TextStyle(
-                color: AppTheme.primary, 
-                fontWeight: FontWeight.w900, 
-                letterSpacing: 2.0,
-              )),
-              const Spacer(),
+              const Expanded(
+                child: Text('AI PRIORITY RANKINGS', 
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppTheme.primary, 
+                    fontWeight: FontWeight.w900, 
+                    letterSpacing: 2.0,
+                  )
+                ),
+              ),
+              const SizedBox(width: 8),
               const Text('FIELD REPORTS', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5))
             ],
           ),

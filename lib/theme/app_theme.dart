@@ -113,6 +113,9 @@ class AppTheme {
     boxShadow: glassmorphismShadow,
   );
 
+  /// ⚠️ DO NOT add borderRadius to this BoxDecoration.
+  /// Non-uniform border colors are incompatible with borderRadius in Flutter.
+  /// Use ClipRRect externally for rounded corners instead.
   static BoxDecoration stitchCardWithLeftBorder(Color color) => BoxDecoration(
     color: cardSurface.withValues(alpha: 0.6),
     border: Border(

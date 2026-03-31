@@ -109,7 +109,7 @@ class AnalyticsDashboardTab extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.surface.withOpacity(0.5),
+        color: AppTheme.surface.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.surfaceLow),
       ),
@@ -158,7 +158,7 @@ class AnalyticsDashboardTab extends StatelessWidget {
       height: 250,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surface.withOpacity(0.5),
+        color: AppTheme.surface.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.surfaceLow),
       ),
@@ -184,7 +184,7 @@ class AnalyticsDashboardTab extends StatelessWidget {
       height: 250,
       padding: const EdgeInsets.only(top: 32, bottom: 16, left: 16, right: 16),
       decoration: BoxDecoration(
-        color: AppTheme.surface.withOpacity(0.5),
+        color: AppTheme.surface.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.surfaceLow),
       ),

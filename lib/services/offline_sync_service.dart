@@ -5,6 +5,7 @@ import 'package:nearby_connections/nearby_connections.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 /// Offline P2P Mesh Sync Service
 /// Handles Bluetooth/WiFi-Direct based report transfer between devices.
@@ -72,9 +73,91 @@ class OfflineSyncService {
   /// Returns the count of pending offline reports.
   int get pendingCount => pendingReports.value.length;
 
-  // ────────── INTERNET CHECK ──────────
+  // ────────── VOLUNTEER CACHING ──────────
 
-  /// Check if device currently has internet connectivity.
+  static const String _volunteersCacheKey = 'offline_volunteers_cache';
+
+  /// Saves a list of active volunteers from Firestore to local storage
+  Future<void> cacheVolunteersOffline(List<Map<String, dynamic>> volunteers) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> encodedList = volunteers.map((v) => jsonEncode(v)).toList();
+    await prefs.setStringList(_volunteersCacheKey, encodedList);
+    debugPrint('[MESH] Cached ${volunteers.length} volunteers for offline matching.');
+  }
+
+  /// Retrieves the cached list of volunteers when offline
+  Future<List<Map<String, dynamic>>> getOfflineVolunteers() async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> encodedList = prefs.getStringList(_volunteersCacheKey) ?? [];
+    return encodedList.map((s) => jsonDecode(s) as Map<String, dynamic>).toList();
+  }
+  // ────────── OFFLINE DISPATCH (ADMIN -> VOLUNTEER) ──────────
+
+  static const String _dispatchOutboxKey = 'offline_dispatch_outbox';
+  static const String _statusUpdatesKey = 'offline_status_updates';
+  ValueNotifier<List<Map<String, dynamic>>> pendingDispatches = ValueNotifier([]);
+  ValueNotifier<Map<String, dynamic>?> receivedMission = ValueNotifier(null);
+  ValueNotifier<List<Map<String, dynamic>>> completedMissions = ValueNotifier([]);
+
+  /// Admin creates a dispatch payload addressed to a specific volunteer
+  Future<void> dispatchMissionOffline(Map<String, dynamic> report, String targetVolunteerId, String volunteerName) async {
+    Map<String, dynamic> dispatchPayload = {
+      ...report,
+      '_isDispatch': true,
+      '_targetVolunteerId': targetVolunteerId,
+      '_targetVolunteerName': volunteerName,
+      '_dispatchTimestamp': DateTime.now().toIso8601String(),
+      '_meshId': 'DISPATCH_${DateTime.now().millisecondsSinceEpoch}',
+    };
+
+    final prefs = await SharedPreferences.getInstance();
+    List<String> outbox = prefs.getStringList(_dispatchOutboxKey) ?? [];
+    outbox.add(jsonEncode(dispatchPayload));
+    await prefs.setStringList(_dispatchOutboxKey, outbox);
+    
+    await _loadPendingDispatches();
+    
+    // Attempt to broadcast immediately if connected
+    _sendAllPendingData();
+  }
+
+  // ────────── STATUS UPDATE (VOLUNTEER -> ADMIN via MESH) ──────────
+
+  /// Volunteer sends a mission completion status back through the mesh.
+  Future<void> sendStatusUpdateViaMesh(String missionMeshId, String status) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    Map<String, dynamic> statusPayload = {
+      '_isStatusUpdate': true,
+      '_meshId': 'STATUS_${DateTime.now().millisecondsSinceEpoch}',
+      '_originalMissionMeshId': missionMeshId,
+      '_status': status,
+      '_volunteerUid': currentUser?.uid ?? 'unknown',
+      '_volunteerName': _userName,
+      '_completedAt': DateTime.now().toIso8601String(),
+    };
+
+    // Store locally so it can be sent via mesh or synced when online
+    final prefs = await SharedPreferences.getInstance();
+    List<String> updates = prefs.getStringList(_statusUpdatesKey) ?? [];
+    updates.add(jsonEncode(statusPayload));
+    await prefs.setStringList(_statusUpdatesKey, updates);
+
+    // Also add to dispatch outbox for mesh broadcast
+    List<String> outbox = prefs.getStringList(_dispatchOutboxKey) ?? [];
+    outbox.add(jsonEncode(statusPayload));
+    await prefs.setStringList(_dispatchOutboxKey, outbox);
+    await _loadPendingDispatches();
+
+    // Try to broadcast immediately
+    _sendAllPendingData();
+    debugPrint('[MESH] Status update queued: $status for mission $missionMeshId');
+  }
+
+  Future<void> _loadPendingDispatches() async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> outbox = prefs.getStringList(_dispatchOutboxKey) ?? [];
+    pendingDispatches.value = outbox.map((s) => jsonDecode(s) as Map<String, dynamic>).toList();
+  }
   static Future<bool> hasInternet() async {
     final result = await Connectivity().checkConnectivity();
     return result.any((r) => r == ConnectivityResult.mobile || r == ConnectivityResult.wifi);
@@ -185,8 +268,8 @@ class OfflineSyncService {
             _connectedEndpointId = id;
             syncStatus.value = 'CONNECTED';
             debugPrint('[MESH] Worker connected to Admin: $id');
-            // Auto-send pending reports once connected
-            _sendAllPendingReports();
+            // Auto-send pending reports and dispatches once connected
+            _sendAllPendingData();
           } else {
             syncStatus.value = 'CONNECTION_REJECTED';
           }
@@ -216,65 +299,123 @@ class OfflineSyncService {
 
   // ────────── DATA TRANSFER ──────────
 
-  /// Sends all pending offline reports to the connected Admin.
-  Future<void> _sendAllPendingReports() async {
-    if (_connectedEndpointId == null || pendingReports.value.isEmpty) return;
+  /// Sends all pending offline reports and dispatches to the connected device.
+  Future<void> _sendAllPendingData() async {
+    if (_connectedEndpointId == null) return;
+    
+    List<Map<String, dynamic>> allData = [
+      ...pendingReports.value,
+      ...pendingDispatches.value,
+    ];
+
+    if (allData.isEmpty) return;
     
     syncStatus.value = 'SENDING';
     try {
-      // Serialize all reports into a single JSON array
-      String jsonData = jsonEncode(pendingReports.value);
+      // Serialize all data into a single JSON array
+      String jsonData = jsonEncode(allData);
       Uint8List bytes = Uint8List.fromList(utf8.encode(jsonData));
       
       await Nearby().sendBytesPayload(_connectedEndpointId!, bytes);
       
       syncStatus.value = 'SENT_SUCCESS';
-      // Clear the queue after successful send
+      // Clear both report and dispatch queues after successful send
       await _clearQueue();
-      debugPrint('[MESH] Successfully sent ${pendingReports.value.length} reports');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_dispatchOutboxKey, []);
+      pendingDispatches.value = [];
+      debugPrint('[MESH] Successfully sent ${allData.length} records');
     } catch (e) {
       syncStatus.value = 'SEND_FAILED';
       debugPrint('[MESH] Send error: $e');
     }
   }
 
-  /// Handle received data payload (Admin side).
+  /// Handle received data payload.
   void _handleReceivedPayload(Payload payload) async {
     if (payload.type != PayloadType.BYTES || payload.bytes == null) return;
 
     try {
       String jsonStr = utf8.decode(payload.bytes!);
-      List<dynamic> reports = jsonDecode(jsonStr);
+      List<dynamic> records = jsonDecode(jsonStr);
       
       syncStatus.value = 'RECEIVING';
-      debugPrint('[MESH] Received ${reports.length} reports via P2P mesh');
+      debugPrint('[MESH] Received ${records.length} records via P2P mesh');
 
-      // Try to upload to Firestore immediately (if Admin has internet)
       bool online = await hasInternet();
+      final currentUserUid = FirebaseAuth.instance.currentUser?.uid;
       
-      for (var report in reports) {
-        Map<String, dynamic> reportData = Map<String, dynamic>.from(report);
+      for (var record in records) {
+        Map<String, dynamic> data = Map<String, dynamic>.from(record);
+        
+        // 1. Check if this is a STATUS UPDATE (Volunteer -> Admin)
+        if (data['_isStatusUpdate'] == true) {
+          if (_userRole == 'Admin' || _userRole == 'Admin / NGO') {
+            // Admin received completion update!
+            bool alreadyHave = completedMissions.value.any((m) => m['_meshId'] == data['_meshId']);
+            if (!alreadyHave) {
+              completedMissions.value = [...completedMissions.value, data];
+              debugPrint('✅ MISSION STATUS UPDATE RECEIVED: ${data['_status']} from ${data['_volunteerName']}');
+            }
+          } else {
+            // Not admin — act as MULE for the status update
+            bool hasIt = pendingDispatches.value.any((disp) => disp['_meshId'] == data['_meshId']);
+            if (!hasIt) {
+              final prefs = await SharedPreferences.getInstance();
+              List<String> outbox = prefs.getStringList(_dispatchOutboxKey) ?? [];
+              outbox.add(jsonEncode(data));
+              await prefs.setStringList(_dispatchOutboxKey, outbox);
+              await _loadPendingDispatches();
+              debugPrint('[MESH] Epidemic Routing: Forwarding status update as mule');
+            }
+          }
+          continue;
+        }
+
+        // 2. Check if this is a DISPATCH mission
+        if (data['_isDispatch'] == true) {
+          String targetId = data['_targetVolunteerId'] ?? '';
+          
+          if (targetId == currentUserUid && _userRole == 'Volunteer') {
+            // WE are the target! Alert the volunteer!
+            if (receivedMission.value == null || receivedMission.value!['_meshId'] != data['_meshId']) {
+              receivedMission.value = data;
+              debugPrint('🚨 BINGO! MISSION RECEIVED FOR ME: ${data['description']}');
+            }
+          } else {
+            // We are not the target, or we are another role. We act as a MULE.
+            bool hasIt = pendingDispatches.value.any((disp) => disp['_meshId'] == data['_meshId']);
+            if (!hasIt) {
+              final prefs = await SharedPreferences.getInstance();
+              List<String> outbox = prefs.getStringList(_dispatchOutboxKey) ?? [];
+              outbox.add(jsonEncode(data));
+              await prefs.setStringList(_dispatchOutboxKey, outbox);
+              await _loadPendingDispatches();
+              debugPrint('[MESH] Epidemic Routing: Stored dispatch as mule');
+            }
+          }
+          continue; // Done with this record
+        }
+
+        // 2. Otherwise, it's a standard Offline Report
         // Remove mesh metadata before saving to Firestore
-        reportData.remove('_meshId');
-        reportData.remove('_meshOrigin');
-        reportData.remove('_meshHops');
-        reportData.remove('_meshMaxHops');
-        reportData.remove('_meshTTLHours');
-        // Keep _meshTimestamp as the original timestamp
-        String? meshTs = reportData.remove('_meshTimestamp');
+        data.remove('_meshId');
+        data.remove('_meshOrigin');
+        data.remove('_meshHops');
+        data.remove('_meshMaxHops');
+        data.remove('_meshTTLHours');
+        String? meshTs = data.remove('_meshTimestamp');
         
         if (online) {
-          // Save directly to Firestore
-          reportData['source'] = '${reportData['source'] ?? 'Field Worker'} (via P2P Mesh)';
-          reportData['timestamp'] = FieldValue.serverTimestamp();
-          await FirebaseFirestore.instance.collection('reports').add(reportData);
+          data['source'] = '${data['source'] ?? 'Field Worker'} (via P2P Mesh)';
+          data['timestamp'] = FieldValue.serverTimestamp();
+          await FirebaseFirestore.instance.collection('reports').add(data);
           debugPrint('[MESH] Report saved to Firestore');
         } else {
-          // Admin is also offline — queue it here too
-          reportData['source'] = '${reportData['source'] ?? 'Field Worker'} (via P2P Mesh)';
-          reportData['timestamp'] = meshTs;
-          await queueReportOffline(reportData);
-          debugPrint('[MESH] Admin offline — report queued locally');
+          data['source'] = '${data['source'] ?? 'Field Worker'} (via P2P Mesh)';
+          data['timestamp'] = meshTs;
+          await queueReportOffline(data);
+          debugPrint('[MESH] Relaying admin offline — report queued locally');
         }
       }
       
@@ -289,32 +430,64 @@ class OfflineSyncService {
 
   /// Call this periodically or on connectivity change to flush the local queue.
   Future<void> trySyncQueueToFirestore() async {
-    if (pendingReports.value.isEmpty) return;
     bool online = await hasInternet();
     if (!online) return;
 
-    syncStatus.value = 'UPLOADING';
-    List<Map<String, dynamic>> toSync = List.from(pendingReports.value);
-    
-    for (var report in toSync) {
-      try {
-        Map<String, dynamic> cleaned = Map<String, dynamic>.from(report);
-        cleaned.remove('_meshId');
-        cleaned.remove('_meshOrigin');
-        cleaned.remove('_meshHops');
-        cleaned.remove('_meshMaxHops');
-        cleaned.remove('_meshTTLHours');
-        cleaned.remove('_meshTimestamp');
-        cleaned['timestamp'] = FieldValue.serverTimestamp();
-        
-        await FirebaseFirestore.instance.collection('reports').add(cleaned);
-      } catch (e) {
-        debugPrint('[MESH] Firestore sync error: $e');
-        return; // Stop on first failure, will retry later
+    // 1. Sync pending reports
+    if (pendingReports.value.isNotEmpty) {
+      syncStatus.value = 'UPLOADING';
+      List<Map<String, dynamic>> toSync = List.from(pendingReports.value);
+      
+      for (var report in toSync) {
+        try {
+          Map<String, dynamic> cleaned = Map<String, dynamic>.from(report);
+          cleaned.remove('_meshId');
+          cleaned.remove('_meshOrigin');
+          cleaned.remove('_meshHops');
+          cleaned.remove('_meshMaxHops');
+          cleaned.remove('_meshTTLHours');
+          cleaned.remove('_meshTimestamp');
+          cleaned['timestamp'] = FieldValue.serverTimestamp();
+          
+          await FirebaseFirestore.instance.collection('reports').add(cleaned);
+        } catch (e) {
+          debugPrint('[MESH] Firestore sync error: $e');
+          return; // Stop on first failure, will retry later
+        }
       }
+      await _clearQueue();
     }
-    
-    await _clearQueue();
+
+    // 2. Sync completed mission status updates to Firestore
+    if (completedMissions.value.isNotEmpty) {
+      for (var update in completedMissions.value) {
+        try {
+          String originalMeshId = update['_originalMissionMeshId'] ?? '';
+          String status = update['_status'] ?? 'Completed';
+          // Find matching mission/report in Firestore and update status
+          var reportQuery = await FirebaseFirestore.instance.collection('reports')
+              .where('status', isEqualTo: 'Dispatched')
+              .get();
+          for (var doc in reportQuery.docs) {
+            await doc.reference.update({'status': status});
+          }
+          debugPrint('[MESH] Synced status update to Firestore: $originalMeshId -> $status');
+        } catch (e) {
+          debugPrint('[MESH] Status sync error: $e');
+        }
+      }
+      completedMissions.value = [];
+    }
+
+    // 3. Clear stale dispatch/status mule payloads (no longer needed once online)
+    if (pendingDispatches.value.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_dispatchOutboxKey, []);
+      await prefs.setStringList(_statusUpdatesKey, []);
+      pendingDispatches.value = [];
+      debugPrint('[MESH] Cleared stale mesh payloads (online now)');
+    }
+
     syncStatus.value = 'SYNC_COMPLETE';
   }
 

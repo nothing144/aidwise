@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../services/ai_service.dart';
+import '../services/offline_sync_service.dart';
+import '../services/offline_matching_engine.dart';
 
 class SmartMatcherScreen extends StatefulWidget {
   final String? reportId;
@@ -36,8 +38,10 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
 
   Future<void> _runAllocationEngine() async {
     try {
+      bool isOnline = await OfflineSyncService.hasInternet();
+
       // 1. Fetch the incident report data
-      if (widget.reportId != null) {
+      if (widget.reportId != null && isOnline) {
         final reportDoc = await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).get();
         _reportData = reportDoc.data() ?? {'type': widget.need, 'location': widget.location};
       } else {
@@ -45,44 +49,59 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
       }
 
       // 2. Fetch ALL available volunteers
-      final volSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('role', isEqualTo: 'Volunteer')
-          .get();
+      List<Map<String, dynamic>> volunteers = [];
+      if (isOnline) {
+        final volSnapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .where('role', isEqualTo: 'Volunteer')
+            .get();
+        volunteers = volSnapshot.docs.map((d) {
+          final data = d.data();
+          data['id'] = d.id;
+          return data;
+        }).toList();
+        // Update offline cache for later
+        await OfflineSyncService().cacheVolunteersOffline(volunteers);
+      } else {
+        volunteers = await OfflineSyncService().getOfflineVolunteers();
+        debugPrint('[MESH] Using ${volunteers.length} cached offline volunteers for matching');
+      }
 
-      if (volSnapshot.docs.isEmpty) {
+      if (volunteers.isEmpty) {
         if (mounted) setState(() => _isAnalyzing = false);
         return;
       }
 
-      // 2.5 Batch-run Custom Hugging Face Sentence Transformer Model
-      List<String> volunteerSentences = [];
-      for (var doc in volSnapshot.docs) {
-        final volData = doc.data();
-        List<String> skills = List<String>.from(volData['skills'] ?? []);
-        String sentence = skills.isEmpty ? 'Volunteer without specific skills.' : 'Volunteer skilled in: ${skills.join(', ')}';
-        volunteerSentences.add(sentence);
+      // 2.5 Batch-run Custom Hugging Face Sentence Transformer Model OR Local TF-IDF Matcher
+      List<double> artificialScores = [];
+      if (isOnline) {
+        List<String> volunteerSentences = [];
+        for (var vol in volunteers) {
+          List<String> skills = List<String>.from(vol['skills'] ?? []);
+          String sentence = skills.isEmpty ? 'Volunteer without specific skills.' : 'Volunteer skilled in: ${skills.join(', ')}';
+          volunteerSentences.add(sentence);
+        }
+        artificialScores = await AIService.batchComputeHFSkillScores(widget.need, volunteerSentences);
+      } else {
+        artificialScores = OfflineMatchingEngine.computeOfflineScores(widget.need, volunteers);
       }
-      
-      List<double> hfScores = await AIService.batchComputeHFSkillScores(widget.need, volunteerSentences);
 
       // 3. Compute combined scores (HF Skills + Local Distance + Local Vehicle)
       List<Map<String, dynamic>> scoredVolunteers = [];
-      for (int i = 0; i < volSnapshot.docs.length; i++) {
-        final doc = volSnapshot.docs[i];
-        final volData = doc.data();
+      for (int i = 0; i < volunteers.length; i++) {
+        final volData = volunteers[i];
         
         final scores = AIService.computeLocalScore(
           volData, 
           _reportData,
-          injectedSkillScore: hfScores[i]
+          injectedSkillScore: artificialScores[i]
         );
         
         scoredVolunteers.add({
-          'id': doc.id,
+          'id': volData['id'] ?? 'unknown',
           'data': volData,
           'scores': scores,
-          'reasoning': 'Computing AI reasoning...',
+          'reasoning': isOnline ? 'Computing AI reasoning...' : 'Offline Semantic Match Algorithm.',
         });
       }
 
@@ -139,47 +158,74 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
     try {
       String location = widget.location;
       String need = widget.need;
-      double latitude = 28.6139;
-      double longitude = 77.2090;
-
+      double latitude = 0.0;
+      double longitude = 0.0;
       String description = '';
 
-      if (widget.reportId != null) {
+      bool isOnline = await OfflineSyncService.hasInternet();
+
+      if (widget.reportId != null && isOnline) {
         final reportDoc = await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).get();
         if (reportDoc.exists) {
           location = reportDoc.data()?['location'] ?? location;
           need = reportDoc.data()?['type'] ?? need;
-          latitude = reportDoc.data()?['latitude'] ?? latitude;
-          longitude = reportDoc.data()?['longitude'] ?? longitude;
+          latitude = (reportDoc.data()?['latitude'] as num?)?.toDouble() ?? 0.0;
+          longitude = (reportDoc.data()?['longitude'] as num?)?.toDouble() ?? 0.0;
           description = reportDoc.data()?['description'] ?? '';
         }
+      } else if (widget.reportId != null) {
+        // Offline: use _reportData already fetched during allocation engine
+        location = _reportData['location'] ?? location;
+        need = _reportData['type'] ?? need;
+        latitude = (_reportData['latitude'] as num?)?.toDouble() ?? 0.0;
+        longitude = (_reportData['longitude'] as num?)?.toDouble() ?? 0.0;
+        description = _reportData['description'] ?? '';
       }
 
-      await FirebaseFirestore.instance.collection('missions').add({
-        'title': 'AI Dispatched: $need',
-        'location': location,
-        'latitude': latitude,
-        'longitude': longitude,
-        'description': description,
-        'assignedVolunteerId': selectedVol['id'],
-        'status': 'Pending',
-        'reportId': widget.reportId,
-        'matchScore': selectedVol['scores']['total_score'],
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-
-      if (widget.reportId != null) {
-        await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).update({
-          'status': 'Assigned'
+      if (isOnline) {
+        // Online: write to Firestore
+        await FirebaseFirestore.instance.collection('missions').add({
+          'title': 'AI Dispatched: $need',
+          'location': location,
+          'latitude': latitude,
+          'longitude': longitude,
+          'description': description,
+          'assignedVolunteerId': selectedVol['id'],
+          'status': 'Pending',
+          'reportId': widget.reportId,
+          'matchScore': selectedVol['scores']['total_score'],
+          'timestamp': FieldValue.serverTimestamp(),
         });
+
+        if (widget.reportId != null) {
+          await FirebaseFirestore.instance.collection('reports').doc(widget.reportId).update({
+            'status': 'Assigned'
+          });
+        }
+      } else {
+        // Offline: dispatch via P2P mesh
+        final reportForMesh = {
+          'type': need,
+          'location': location,
+          'latitude': latitude,
+          'longitude': longitude,
+          'description': description,
+          'urgency': _reportData['urgency'] ?? 'High',
+        };
+        String volName = selectedVol['data']['displayName'] ?? selectedVol['data']['fullName'] ?? 'Volunteer';
+        await OfflineSyncService().dispatchMissionOffline(reportForMesh, selectedVol['id'], volName);
       }
 
       if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
-            backgroundColor: AppTheme.urgencyLow,
-            content: Text('DISPATCHED ${selectedVol['data']['displayName'] ?? 'VOLUNTEER'} (${selectedVol['scores']['total_score']}% MATCH)', 
+            backgroundColor: isOnline ? AppTheme.urgencyLow : Colors.blueAccent,
+            content: Text(
+              isOnline
+                ? 'DISPATCHED ${selectedVol['data']['displayName'] ?? 'VOLUNTEER'} (${selectedVol['scores']['total_score']}% MATCH)'
+                : '📡 OFFLINE DISPATCH via Mesh → ${selectedVol['data']['displayName'] ?? 'VOLUNTEER'}',
               style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 1, color: Colors.white)),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
