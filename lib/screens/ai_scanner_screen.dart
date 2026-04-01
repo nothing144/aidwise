@@ -50,38 +50,240 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
   }
 
   void _showManualEntryDialog() {
+    String selectedUrgency = 'High';
+    String selectedResourceType = 'Medical Need';
+    final locationController = TextEditingController();
+
+    const List<String> urgencyOptions = ['Low', 'Medium', 'High', 'Critical'];
+    const List<String> resourceOptions = [
+      'Medical Need',
+      'Blood Required',
+      'Food Drive',
+      'Education Support',
+      'Logistics Help',
+      'Search Rescue',
+      'Fire Hazard',
+      'Clothing Drive',
+      'Shelter Management',
+      'Sanitation & Hygiene',
+      'Animal Welfare',
+      'Elderly Care',
+      'Other',
+    ];
+
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppTheme.surface,
-          title: const Text('Manual Report', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
-          content: TextField(
-            controller: _manualController,
-            maxLines: 4,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: 'Describe the emergency (e.g. 50 Blankets needed at Downtown)',
-              hintStyle: TextStyle(color: AppTheme.textSecondary),
-              enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: AppTheme.primary.withValues(alpha: 0.3))),
-              focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: AppTheme.primary)),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.black),
-              onPressed: () {
-                if (_manualController.text.trim().isEmpty) return;
-                Navigator.pop(context);
-                _startScan(); // Start "AI analysis" of the text
-              },
-              child: const Text('SUBMIT'),
-            ),
-          ],
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return Dialog(
+              backgroundColor: AppTheme.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 20,
+                  bottom: MediaQuery.of(dialogContext).viewInsets.bottom > 0 ? 8 : 20,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          const Icon(Icons.edit_document, color: AppTheme.primary, size: 22),
+                          const SizedBox(width: 8),
+                          const Text('Manual Report', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 20)),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Urgency Selector
+                      Text('URGENCY', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceLow,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedUrgency,
+                            dropdownColor: AppTheme.surface,
+                            isExpanded: true,
+                            icon: const Icon(Icons.expand_more, color: AppTheme.primary),
+                            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                            items: urgencyOptions.map((u) => DropdownMenuItem(
+                              value: u,
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 10, height: 10,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: u == 'Critical' ? Colors.redAccent
+                                           : u == 'High' ? AppTheme.urgencyHigh
+                                           : u == 'Medium' ? AppTheme.urgencyMedium
+                                           : AppTheme.urgencyLow,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(u),
+                                ],
+                              ),
+                            )).toList(),
+                            onChanged: (val) => setDialogState(() => selectedUrgency = val!),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Resource Type Selector
+                      Text('RESOURCE TYPE', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceLow,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedResourceType,
+                            dropdownColor: AppTheme.surface,
+                            isExpanded: true,
+                            icon: const Icon(Icons.expand_more, color: AppTheme.primary),
+                            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                            items: resourceOptions.map((r) => DropdownMenuItem(
+                              value: r,
+                              child: Text(r),
+                            )).toList(),
+                            onChanged: (val) => setDialogState(() => selectedResourceType = val!),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Location Input
+                      Text('LOCATION', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: locationController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Downtown Camp, Near City Hall',
+                          hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6)),
+                          prefixIcon: Icon(Icons.place, color: AppTheme.primary.withValues(alpha: 0.7), size: 20),
+                          filled: true,
+                          fillColor: AppTheme.surfaceLow,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppTheme.primary.withValues(alpha: 0.3)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: AppTheme.primary),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Description
+                      Text('DESCRIPTION', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _manualController,
+                        maxLines: 3,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Describe the situation...',
+                          hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6)),
+                          filled: true,
+                          fillColor: AppTheme.surfaceLow,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppTheme.primary.withValues(alpha: 0.3)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: AppTheme.primary),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(dialogContext),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.grey,
+                                side: const BorderSide(color: Colors.grey),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              child: const Text('CANCEL', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: AppTheme.cyanMagentaGradient,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  shadowColor: Colors.transparent,
+                                  foregroundColor: Colors.black,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onPressed: () {
+                                  if (_manualController.text.trim().isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Please add a description'), backgroundColor: Colors.redAccent),
+                                    );
+                                    return;
+                                  }
+                                  Navigator.pop(dialogContext);
+                                  // Set values directly — skip AI call
+                                  setState(() {
+                                    _aiUrgency = selectedUrgency;
+                                    _aiType = selectedResourceType;
+                                    _aiLocation = locationController.text.trim().isNotEmpty
+                                        ? locationController.text.trim()
+                                        : 'Location Logged (GPS)';
+                                    _isExtracting = true;
+                                  });
+                                },
+                                child: const Text('SUBMIT REPORT', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -129,14 +331,37 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
     if (mounted) {
       _controller.stop();
       
-      // Block API errors and suggest manual entry with ML Kit fallback
+      // Block API errors — handle differently based on whether user already typed text
       if (_aiType == 'API_ERROR') {
+        // If user already provided manual text, use fallback defaults and proceed
+        // (avoids infinite loop of re-opening the manual dialog)
+        if (inputForAI.isNotEmpty) {
+          setState(() {
+            _isScanning = false;
+            _aiUrgency = 'High';
+            _aiType = 'Manual Report';
+            _aiLocation = 'Location Logged (GPS)';
+            _isExtracting = true;
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('⚠️ AI Offline. Proceeding with your manual report.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
+
+        // No text yet (image-only scan failed) — try ML Kit, then open manual entry
         setState(() {
           _isScanning = false;
           _isExtracting = false;
         });
         
-        // Attempt on-device text extraction
+        // Attempt on-device text extraction from image
         if (_imageFile != null) {
           try {
             final inputImage = InputImage.fromFilePath(_imageFile!.path);
@@ -335,6 +560,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           // Live Camera Simulation (offline-safe)

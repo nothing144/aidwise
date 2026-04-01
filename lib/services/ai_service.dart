@@ -10,6 +10,40 @@ class AIService {
 
   static const String _apiKey = "AIzaSyA5zfFBETmHyBQgozYaNT_xkL3tj9PVjlI"; 
 
+  // ─────────────── RATE LIMITING & CACHING ───────────────
+  static DateTime _lastApiCall = DateTime(2000);
+  static const Duration _minCallInterval = Duration(seconds: 3);
+  static final Map<String, _CachedResponse> _cache = {};
+  static const Duration _cacheTTL = Duration(minutes: 5);
+
+  // Singleton models (avoid recreating per call)
+  static GenerativeModel? _flashModel;
+  static GenerativeModel? _flashModelJson;
+
+  static GenerativeModel get _getFlashModel {
+    _flashModel ??= GenerativeModel(model: 'gemini-2.0-flash', apiKey: _apiKey);
+    return _flashModel!;
+  }
+
+  static GenerativeModel get _getFlashModelJson {
+    _flashModelJson ??= GenerativeModel(
+      model: 'gemini-2.0-flash',
+      apiKey: _apiKey,
+      generationConfig: GenerationConfig(responseMimeType: 'application/json'),
+    );
+    return _flashModelJson!;
+  }
+
+  /// Enforces minimum interval between API calls
+  static Future<void> _waitForRateLimit() async {
+    final now = DateTime.now();
+    final elapsed = now.difference(_lastApiCall);
+    if (elapsed < _minCallInterval) {
+      await Future.delayed(_minCallInterval - elapsed);
+    }
+    _lastApiCall = DateTime.now();
+  }
+
   // ─────────────────────────── SKILL TAXONOMY ───────────────────────────
   // Maps report "type" keywords to relevant volunteer skills.
   // This acts as a lightweight "feature vector" for local ML scoring.
@@ -43,11 +77,8 @@ class AIService {
     }
     
     try {
-      final model = GenerativeModel(
-        model: 'gemini-2.0-flash', 
-        apiKey: _apiKey,
-        generationConfig: GenerationConfig(responseMimeType: 'application/json')
-      );
+      await _waitForRateLimit();
+      final model = _getFlashModelJson;
       
       final promptString = 'Analyze this NGO field incident report. If there is an image, describe the emergency visible. If there is text, use it too. Text provided: "${textInput ?? 'None'}". '
       'CRITICAL: If the image does NOT depict an emergency, disaster, or relevant NGO incident (e.g. it is a normal selfie, meme, random object, normal scenery), you MUST return "type": "Irrelevant" and "urgency": "None" and "location": "Unknown". '
@@ -232,11 +263,8 @@ class AIService {
     }
     
     try {
-      final model = GenerativeModel(
-        model: 'gemini-2.0-flash', 
-        apiKey: _apiKey,
-        generationConfig: GenerationConfig(responseMimeType: 'application/json')
-      );
+      await _waitForRateLimit();
+      final model = _getFlashModelJson;
       
       final prompt = '''You are an intelligent resource allocation engine for NGOs.
 Given the following data, explain in 1 concise sentence WHY this volunteer is suitable for this task.
@@ -264,6 +292,14 @@ Return JSON: {"reasoning": "1 short professional sentence"}''';
       return 'No active incidents. All systems nominal.';
     }
 
+    // Check cache first
+    final cacheKey = 'summary_${openReports.length}_$volunteerCount';
+    final cached = _cache[cacheKey];
+    if (cached != null && DateTime.now().difference(cached.timestamp) < _cacheTTL) {
+      debugPrint('Using cached situation summary');
+      return cached.data as String;
+    }
+
     if (!isLiveMode) {
       await Future.delayed(const Duration(seconds: 1));
       return 'SITUATION BRIEF: ${openReports.length} active incidents across multiple clusters. '
@@ -272,10 +308,8 @@ Return JSON: {"reasoning": "1 short professional sentence"}''';
     }
 
     try {
-      final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
-        apiKey: _apiKey,
-      );
+      await _waitForRateLimit();
+      final model = _getFlashModel;
 
       final reportSummaries = openReports.map((r) =>
         'Type: ${r['type']}, Urgency: ${r['urgency']}, Location: ${r['location']}'
@@ -289,7 +323,12 @@ Available Volunteers: $volunteerCount
 Be specific about patterns you see (e.g., what % are medical vs food, which areas are hotspots). End with one actionable recommendation. Keep it under 80 words. Do NOT use markdown.''';
 
       final response = await model.generateContent([Content.text(prompt)]);
-      return response.text ?? 'Unable to generate summary.';
+      final result = response.text ?? 'Unable to generate summary.';
+      
+      // Cache the result
+      _cache[cacheKey] = _CachedResponse(data: result, timestamp: DateTime.now());
+      
+      return result;
     } catch (e) {
       debugPrint("Gemini Summary Error: $e");
       return 'SUMMARY: ${openReports.length} active incidents detected. $volunteerCount volunteers on standby. Manual review recommended.';
@@ -305,4 +344,11 @@ Be specific about patterns you see (e.g., what % are medical vs food, which area
       'reasoning': reasoning['reasoning'],
     };
   }
+}
+
+/// Simple cache entry with timestamp for TTL expiry
+class _CachedResponse {
+  final dynamic data;
+  final DateTime timestamp;
+  _CachedResponse({required this.data, required this.timestamp});
 }
