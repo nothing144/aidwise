@@ -79,7 +79,7 @@ class OfflineMessageAdapter extends TypeAdapter<OfflineMessage> {
       ttl: Duration(milliseconds: reader.readInt()),
       acked: reader.readBool(),
       hopCount: reader.readInt(),
-      seenByNodes: (reader.readList() as List).cast<String>(),
+      seenByNodes: reader.readList().cast<String>(),
       retryCount: reader.readInt(),
     );
   }

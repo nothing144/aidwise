@@ -95,7 +95,7 @@ class _VolunteerDashboardScreenState extends State<VolunteerDashboardScreen> {
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
       child: ValueListenableBuilder<int>(
         valueListenable: GetIt.I<OfflineQueueService>().pendingCount,
-        builder: (context, count, child) {
+        builder: (context, pendingCount, child) {
           return Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -250,7 +250,7 @@ class _VolunteerDashboardScreenState extends State<VolunteerDashboardScreen> {
                                  onTap: () {} // Offline mission viewer logic goes here
                                ),
                              );
-                          }).toList(),
+                          }),
                         ],
                       );
                     }
@@ -406,7 +406,7 @@ class _VolunteerDashboardScreenState extends State<VolunteerDashboardScreen> {
                   ),
                   child: Text(urgencyInfo, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
-                if (bottomAction != null) bottomAction,
+                ?bottomAction,
               ],
             ),
           ],

@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
+import '../services/offline_sync_service.dart';
 
 class DataVaultTab extends StatefulWidget {
   const DataVaultTab({super.key});
@@ -156,6 +157,7 @@ class _DataVaultTabState extends State<DataVaultTab> {
           ),
           const SizedBox(height: 12),
           // Data List
+          Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('reports')

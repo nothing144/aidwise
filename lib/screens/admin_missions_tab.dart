@@ -111,7 +111,7 @@ class AdminMissionsTab extends StatelessWidget {
   Widget _buildDeliveryStatus(String missionId, Map<String, dynamic> missionData) {
     return ValueListenableBuilder<int>(
       valueListenable: GetIt.I<OfflineQueueService>().pendingCount,
-      builder: (context, _, __) {
+      builder: (context, _, child) {
         if (!Hive.isBoxOpen(OfflineQueueService.queueBoxName)) return const SizedBox.shrink();
         
         final box = Hive.box<OfflineMessage>(OfflineQueueService.queueBoxName);

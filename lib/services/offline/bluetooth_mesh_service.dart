@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:flutter/foundation.dart';
 import '../../models/offline/node_info.dart';

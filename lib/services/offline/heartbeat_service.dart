@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import '../../models/offline/node_info.dart';
 import '../../models/offline/offline_message.dart';
 import 'bluetooth_mesh_service.dart';

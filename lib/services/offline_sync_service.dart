@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 /// Offline P2P Mesh Sync Service
 /// Handles Bluetooth/WiFi-Direct based report transfer between devices.
@@ -14,6 +15,7 @@ class OfflineSyncService {
   factory OfflineSyncService() => _instance;
   OfflineSyncService._internal();
 
+  static const String _serviceId = 'com.aidwise.mesh';
   static const String _queueKey = 'offline_report_queue';
   static const Strategy _strategy = Strategy.P2P_STAR;
   static const String _vaultCacheBox = 'vault_reports_cache';

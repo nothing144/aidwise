@@ -48,7 +48,7 @@ class SyncSnapshotAdapter extends TypeAdapter<SyncSnapshot> {
     return SyncSnapshot(
       generatedAt: DateTime.fromMillisecondsSinceEpoch(reader.readInt()),
       byNodeId: reader.readString(),
-      pendingDispatches: (reader.readList() as List).cast<OfflineMessage>(),
+      pendingDispatches: reader.readList().cast<OfflineMessage>(),
       currentAssignments: Map<String, String>.from(jsonDecode(reader.readString())),
       nodeStatuses: Map<String, NodeStatus>.from(jsonDecode(reader.readString()).map((k, v) => MapEntry(k, NodeStatus.values.byName(v)))),
     );
