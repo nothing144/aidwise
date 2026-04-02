@@ -26,8 +26,8 @@ class OfflineMatchingEngine {
     return intersectionCount / unionCount;
   }
 
-  /// Scores a list of volunteers based offline keyword matching
-  static List<double> computeOfflineScores(String incidentText, List<Map<String, dynamic>> volunteers) {
+  /// Scores a list of volunteers based offline keyword matching and geo-distance
+  static List<double> computeOfflineScores(String incidentText, double incidentLat, double incidentLng, List<Map<String, dynamic>> volunteers) {
     Set<String> incidentTokens = _tokenize(incidentText);
     
     // Add domain synonyms for common disaster terms to boost accuracy
@@ -64,6 +64,18 @@ class OfflineMatchingEngine {
       if (baseScore == 0 && allVolunteerTokens.isNotEmpty) {
         scaledScore = 0.45; // Baseline for having _some_ skills
       }
+
+      // Apply Geographical Distance Penalty
+      double vLat = (v['latitude'] as num?)?.toDouble() ?? incidentLat;
+      double vLng = (v['longitude'] as num?)?.toDouble() ?? incidentLng;
+      
+      double latDiff = (vLat - incidentLat).abs();
+      double lngDiff = (vLng - incidentLng).abs();
+      double distanceDeg = sqrt((latDiff * latDiff) + (lngDiff * lngDiff));
+      
+      // Rough approximation: 1 degree ~ 111km. Penalty of 0.1 per 0.05 degrees (~5.5km)
+      double penalty = distanceDeg * 2.0; 
+      scaledScore = max(0.0, scaledScore - penalty);
 
       scores.add(min(0.99, scaledScore));
     }

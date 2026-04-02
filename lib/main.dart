@@ -8,12 +8,14 @@ import 'screens/admin_hub_screen.dart';
 import 'screens/field_worker_hub.dart';
 import 'screens/volunteer_dashboard_screen.dart';
 import 'services/auth_service.dart';
+import 'services/offline/locator.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await setupOfflineServices();
   runApp(const AidwiseApp());
 }
 

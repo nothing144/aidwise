@@ -14,9 +14,10 @@ class OfflineSyncService {
   factory OfflineSyncService() => _instance;
   OfflineSyncService._internal();
 
-  static const String _serviceId = 'com.aidwise.mesh';
   static const String _queueKey = 'offline_report_queue';
   static const Strategy _strategy = Strategy.P2P_STAR;
+  static const String _vaultCacheBox = 'vault_reports_cache';
+  static const String _lastVaultSyncKey = 'last_vault_sync_timestamp';
 
   // Callbacks for UI updates
   ValueNotifier<List<Map<String, dynamic>>> pendingReports = ValueNotifier([]);
@@ -41,17 +42,64 @@ class OfflineSyncService {
 
   /// Saves a report to the local offline queue when internet is unavailable.
   Future<void> queueReportOffline(Map<String, dynamic> reportData) async {
-    // Add metadata for mesh routing
-    reportData['_meshId'] = DateTime.now().millisecondsSinceEpoch.toString();
-    reportData['_meshOrigin'] = _userName;
-    reportData['_meshTimestamp'] = DateTime.now().toIso8601String();
-    reportData['_meshHops'] = 0;
-    reportData['_meshMaxHops'] = 10;
-    reportData['_meshTTLHours'] = 24;
+    // Add metadata for mesh routing if not present
+    if (!reportData.containsKey('_meshId')) {
+      reportData['_meshId'] = DateTime.now().millisecondsSinceEpoch.toString();
+      reportData['_meshOrigin'] = _userName;
+      reportData['_meshTimestamp'] = DateTime.now().toIso8601String();
+      reportData['_meshHops'] = 0;
+      reportData['_meshMaxHops'] = 10;
+      reportData['_meshTTLHours'] = 24;
+    }
 
     final prefs = await SharedPreferences.getInstance();
     List<String> queue = prefs.getStringList(_queueKey) ?? [];
-    queue.add(jsonEncode(reportData));
+    
+    // Deduplicate local queue
+    bool alreadyExists = false;
+    for (int i = 0; i < queue.length; i++) {
+        var existing = jsonDecode(queue[i]) as Map<String, dynamic>;
+        if (existing['_meshId'] == reportData['_meshId']) {
+            queue[i] = jsonEncode(reportData); // Update existing
+            alreadyExists = true;
+            break;
+        }
+    }
+    
+    if (!alreadyExists) {
+        queue.add(jsonEncode(reportData));
+    }
+    
+    await prefs.setStringList(_queueKey, queue);
+    await _loadPendingReports();
+  }
+
+  /// Admin artificially approves a report
+  Future<void> approveReport(String meshId) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> queue = prefs.getStringList(_queueKey) ?? [];
+    for (int i = 0; i < queue.length; i++) {
+        var report = jsonDecode(queue[i]) as Map<String, dynamic>;
+        if (report['_meshId'] == meshId) {
+            report['_adminState'] = 'Approved';
+            queue[i] = jsonEncode(report);
+            break;
+        }
+    }
+    await prefs.setStringList(_queueKey, queue);
+    await _loadPendingReports();
+    _sendAllPendingData(); // if mules are connected
+    trySyncQueueToFirestore(); // sync immediately if online
+  }
+
+  /// Admin rejects a report
+  Future<void> rejectReport(String meshId) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> queue = prefs.getStringList(_queueKey) ?? [];
+    queue.removeWhere((item) {
+       var report = jsonDecode(item) as Map<String, dynamic>;
+       return report['_meshId'] == meshId;
+    });
     await prefs.setStringList(_queueKey, queue);
     await _loadPendingReports();
   }
@@ -151,6 +199,26 @@ class OfflineSyncService {
     // Try to broadcast immediately
     _sendAllPendingData();
     debugPrint('[MESH] Status update queued: $status for mission $missionMeshId');
+  }
+
+  /// Volunteer sends a ping via the mesh to request coordinates for a specific mission from the original reporter.
+  Future<void> sendPingForCoordinatesViaMesh(String missionMeshId) async {
+    Map<String, dynamic> pingPayload = {
+      '_isPingForCoords': true,
+      '_meshId': 'PING_${DateTime.now().millisecondsSinceEpoch}',
+      '_targetMissionMeshId': missionMeshId,
+      '_volunteerName': _userName,
+    };
+
+    final prefs = await SharedPreferences.getInstance();
+    // Reusing the dispatch outbox for multi-hop mesh propagation
+    List<String> outbox = prefs.getStringList(_dispatchOutboxKey) ?? [];
+    outbox.add(jsonEncode(pingPayload));
+    await prefs.setStringList(_dispatchOutboxKey, outbox);
+    
+    await _loadPendingDispatches();
+    _sendAllPendingData();
+    debugPrint('[MESH] Ping for coordinates queued for mission: $missionMeshId');
   }
 
   Future<void> _loadPendingDispatches() async {
@@ -397,25 +465,41 @@ class OfflineSyncService {
           continue; // Done with this record
         }
 
-        // 2. Otherwise, it's a standard Offline Report
-        // Remove mesh metadata before saving to Firestore
-        data.remove('_meshId');
-        data.remove('_meshOrigin');
-        data.remove('_meshHops');
-        data.remove('_meshMaxHops');
-        data.remove('_meshTTLHours');
-        String? meshTs = data.remove('_meshTimestamp');
+        // 3. Otherwise, it's a standard Offline Report
+        String meshId = data['_meshId'] ?? DateTime.now().millisecondsSinceEpoch.toString();
         
-        if (online) {
-          data['source'] = '${data['source'] ?? 'Field Worker'} (via P2P Mesh)';
-          data['timestamp'] = FieldValue.serverTimestamp();
-          await FirebaseFirestore.instance.collection('reports').add(data);
-          debugPrint('[MESH] Report saved to Firestore');
+        bool isAdmin = _userRole == 'Admin' || _userRole == 'Admin / NGO';
+        double confidence = (data['confidence'] as num?)?.toDouble() ?? 0.0;
+        bool autoApprove = confidence >= 0.6;
+        
+        if (isAdmin) {
+          if (online && autoApprove && data['_adminState'] != 'Auto-Synced') {
+            Map<String, dynamic> cleaned = Map<String, dynamic>.from(data);
+            cleaned.remove('_meshId');
+            cleaned.remove('_meshOrigin');
+            cleaned.remove('_meshHops');
+            cleaned.remove('_meshMaxHops');
+            cleaned.remove('_meshTTLHours');
+            cleaned.remove('_meshTimestamp');
+            cleaned.remove('_adminState');
+            
+            cleaned['source'] = '${cleaned['source'] ?? 'Field Worker'} (via P2P Mesh)';
+            cleaned['timestamp'] = FieldValue.serverTimestamp();
+            
+            await FirebaseFirestore.instance.collection('reports').doc(meshId).set(cleaned, SetOptions(merge: true));
+            debugPrint('[MESH] Auto-Approved and saved to Firestore (deduped)');
+            
+            data['_adminState'] = 'Auto-Synced';
+            await queueReportOffline(data);
+          } else if (data['_adminState'] != 'Auto-Synced') {
+            data['_adminState'] = 'Needs Review';
+            await queueReportOffline(data);
+            debugPrint('[MESH] Queued locally for Admin Review');
+          }
         } else {
-          data['source'] = '${data['source'] ?? 'Field Worker'} (via P2P Mesh)';
-          data['timestamp'] = meshTs;
+          // Mule logic
           await queueReportOffline(data);
-          debugPrint('[MESH] Relaying admin offline — report queued locally');
+          debugPrint('[MESH] Relaying admin offline — report queued locally as Mule');
         }
       }
       
@@ -437,25 +521,55 @@ class OfflineSyncService {
     if (pendingReports.value.isNotEmpty) {
       syncStatus.value = 'UPLOADING';
       List<Map<String, dynamic>> toSync = List.from(pendingReports.value);
+      List<String> remainingQueue = [];
+      
+      bool isAdmin = _userRole == 'Admin' || _userRole == 'Admin / NGO';
       
       for (var report in toSync) {
         try {
+          String adminState = report['_adminState'] ?? '';
+          
+          if (isAdmin && adminState == 'Needs Review') {
+            remainingQueue.add(jsonEncode(report));
+            continue; // Wait for manual approval via Admin Inbox
+          }
+          if (isAdmin && adminState == 'Auto-Synced') {
+             remainingQueue.add(jsonEncode(report));
+             continue; // Already synced, keep it in Inbox for viewing
+          }
+          
+          // Proceed to upload: Mules upload everything, Admins upload 'Approved' or untracked
           Map<String, dynamic> cleaned = Map<String, dynamic>.from(report);
-          cleaned.remove('_meshId');
+          String meshId = cleaned.remove('_meshId') ?? DateTime.now().millisecondsSinceEpoch.toString();
+          
           cleaned.remove('_meshOrigin');
           cleaned.remove('_meshHops');
           cleaned.remove('_meshMaxHops');
           cleaned.remove('_meshTTLHours');
           cleaned.remove('_meshTimestamp');
+          cleaned.remove('_adminState');
+          
+          cleaned['source'] = '${cleaned['source'] ?? 'Field Worker'} (via P2P Mesh)';
           cleaned['timestamp'] = FieldValue.serverTimestamp();
           
-          await FirebaseFirestore.instance.collection('reports').add(cleaned);
+          await FirebaseFirestore.instance.collection('reports').doc(meshId).set(cleaned, SetOptions(merge: true));
+          
+          if (isAdmin) {
+            // Admin: Turn to 'Auto-Synced' after manual/approved upload to keep it in inbox
+            report['_adminState'] = 'Auto-Synced';
+            remainingQueue.add(jsonEncode(report));
+          } else {
+            // Mule: Remove from queue once successfully uploaded to cloud
+          }
         } catch (e) {
           debugPrint('[MESH] Firestore sync error: $e');
-          return; // Stop on first failure, will retry later
+          remainingQueue.add(jsonEncode(report)); // Stop on first failure, retry later
         }
       }
-      await _clearQueue();
+      
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_queueKey, remainingQueue);
+      await _loadPendingReports();
     }
 
     // 2. Sync completed mission status updates to Firestore
@@ -489,6 +603,53 @@ class OfflineSyncService {
     }
 
     syncStatus.value = 'SYNC_COMPLETE';
+  }
+
+  // ────────── DATA VAULT CACHING (HIVE) ──────────
+
+  /// Persists the last 50 Firestore records locally for offline viewing.
+  Future<void> cacheVaultReports(List<Map<String, dynamic>> reports) async {
+    try {
+      final box = await Hive.openBox(_vaultCacheBox);
+      // Map Firestore Timestamps to ISO strings for Hive storage
+      List<Map<String, dynamic>> serializable = reports.map((r) {
+        var copy = Map<String, dynamic>.from(r);
+        if (copy['timestamp'] is Timestamp) {
+          copy['timestamp'] = (copy['timestamp'] as Timestamp).toDate().toIso8601String();
+        }
+        return copy;
+      }).toList();
+
+      await box.put('reports', serializable);
+      await setLastVaultSyncTime(DateTime.now());
+      debugPrint('[VAULT] Cached ${serializable.length} reports for offline access.');
+    } catch (e) {
+      debugPrint('[VAULT] Cache Error: $e');
+    }
+  }
+
+  /// Retrieves cached reports when Firestore is unreachable.
+  Future<List<Map<String, dynamic>>> getCachedVaultReports() async {
+    try {
+      final box = await Hive.openBox(_vaultCacheBox);
+      final List<dynamic>? cached = box.get('reports');
+      if (cached == null) return [];
+      return cached.map((e) => Map<String, dynamic>.from(e)).toList();
+    } catch (e) {
+      debugPrint('[VAULT] Retrieval Error: $e');
+      return [];
+    }
+  }
+
+  Future<void> setLastVaultSyncTime(DateTime time) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastVaultSyncKey, time.toIso8601String());
+  }
+
+  Future<DateTime?> getLastVaultSyncTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? ts = prefs.getString(_lastVaultSyncKey);
+    return ts != null ? DateTime.parse(ts) : null;
   }
 
   // ────────── CLEANUP ──────────

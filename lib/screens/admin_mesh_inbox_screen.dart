@@ -115,36 +115,7 @@ class _AdminMeshInboxScreenState extends State<AdminMeshInboxScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            // Sync Button
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    await syncService.trySyncQueueToFirestore();
-                    if (context.mounted) {
-                      final status = syncService.syncStatus.value;
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(status == 'SYNC_COMPLETE' 
-                            ? '✅ All reports synced to cloud!' 
-                            : '⚠️ No internet or no pending reports.'),
-                        backgroundColor: status == 'SYNC_COMPLETE' ? Colors.green : Colors.orangeAccent,
-                      ));
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  icon: const Icon(Icons.cloud_upload, size: 18),
-                  label: const Text('SYNC TO CLOUD', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 12)),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             // ── Completed Mission Updates (received via mesh) ──
             ValueListenableBuilder<List<Map<String, dynamic>>>(
               valueListenable: syncService.completedMissions,
@@ -223,7 +194,10 @@ class _AdminMeshInboxScreenState extends State<AdminMeshInboxScreen> {
               child: ValueListenableBuilder<List<Map<String, dynamic>>>(
                 valueListenable: syncService.pendingReports,
                 builder: (context, reports, _) {
-                  if (reports.isEmpty) {
+                  var needsReview = reports.where((r) => r['_adminState'] == 'Needs Review').toList();
+                  var autoSynced = reports.where((r) => r['_adminState'] == 'Auto-Synced').toList();
+
+                  if (needsReview.isEmpty && autoSynced.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -238,13 +212,21 @@ class _AdminMeshInboxScreenState extends State<AdminMeshInboxScreen> {
                     );
                   }
 
-                  return ListView.builder(
+                  return ListView(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: reports.length,
-                    itemBuilder: (context, index) {
-                      final report = reports[index];
-                      return _buildReportCard(report, index + 1);
-                    },
+                    children: [
+                      if (needsReview.isNotEmpty) ...[
+                        Text('NEEDS REVIEW (${needsReview.length})', style: const TextStyle(color: Colors.orangeAccent, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                        const SizedBox(height: 12),
+                        ...needsReview.map((r) => _buildReportCard(r, false)),
+                      ],
+                      if (autoSynced.isNotEmpty) ...[
+                        const SizedBox(height: 24),
+                        Text('AUTO-SYNCED (${autoSynced.length})', style: const TextStyle(color: Colors.green, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                        const SizedBox(height: 12),
+                        ...autoSynced.map((r) => _buildReportCard(r, true)),
+                      ],
+                    ],
                   );
                 },
               ),
@@ -255,7 +237,7 @@ class _AdminMeshInboxScreenState extends State<AdminMeshInboxScreen> {
     );
   }
 
-  Widget _buildReportCard(Map<String, dynamic> report, int serial) {
+  Widget _buildReportCard(Map<String, dynamic> report, bool isAuto) {
     String type = report['type'] ?? 'Unknown';
     String urgency = report['urgency'] ?? 'Medium';
     String location = report['location'] ?? 'N/A';
@@ -264,6 +246,7 @@ class _AdminMeshInboxScreenState extends State<AdminMeshInboxScreen> {
     double? lng = (report['longitude'] as num?)?.toDouble();
     String meshOrigin = report['_meshOrigin'] ?? 'Unknown';
     String meshTime = report['_meshTimestamp'] ?? '';
+    String meshId = report['_meshId'] ?? '';
     
     // Calculate routing string if we have admin position and report GPS
     String routingString = '';
@@ -285,9 +268,9 @@ class _AdminMeshInboxScreenState extends State<AdminMeshInboxScreen> {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.surface.withValues(alpha: 0.5),
+              color: isAuto ? Colors.green.withValues(alpha: 0.05) : AppTheme.surface.withValues(alpha: 0.5),
               border: Border(
-                left: BorderSide(color: urgencyColor, width: 3),
+                left: BorderSide(color: isAuto ? Colors.green : urgencyColor, width: 3),
                 top: BorderSide(color: AppTheme.primary.withValues(alpha: 0.1)),
                 right: BorderSide(color: AppTheme.primary.withValues(alpha: 0.1)),
                 bottom: BorderSide(color: AppTheme.primary.withValues(alpha: 0.1)),
@@ -299,30 +282,37 @@ class _AdminMeshInboxScreenState extends State<AdminMeshInboxScreen> {
                 // Header row
                 Row(
                   children: [
-                    Container(
-                      width: 28, height: 28,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Center(
-                        child: Text('#$serial', style: TextStyle(color: AppTheme.primary, fontSize: 10, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(type.toUpperCase(),
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1)),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: urgencyColor.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: urgencyColor.withValues(alpha: 0.5)),
+                    if (isAuto)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle, color: Colors.green, size: 10),
+                            SizedBox(width: 4),
+                            Text('SYNCED', style: TextStyle(color: Colors.green, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                          ],
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: urgencyColor.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: urgencyColor.withValues(alpha: 0.5)),
+                        ),
+                        child: Text(urgency.toUpperCase(), style: TextStyle(color: urgencyColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
                       ),
-                      child: Text(urgency.toUpperCase(), style: TextStyle(color: urgencyColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -406,24 +396,66 @@ class _AdminMeshInboxScreenState extends State<AdminMeshInboxScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                
-                // Dispatch Button
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      _showOfflineDispatchDialog(report);
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.primary,
-                      side: const BorderSide(color: AppTheme.primary),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                // Review Actions OR Offline Dispatch
+                if (isAuto)
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        _showOfflineDispatchDialog(report);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primary,
+                        side: const BorderSide(color: AppTheme.primary),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.send_to_mobile, size: 16),
+                      label: const Text('DISPATCH OFFLINE MATCH', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 11)),
                     ),
-                    icon: const Icon(Icons.send_to_mobile, size: 16),
-                    label: const Text('DISPATCH OFFLINE MATCH', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 11)),
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            await syncService.approveReport(meshId);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report Approved and Ready for Cloud Sync!'), backgroundColor: Colors.green));
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(Icons.check, size: 16),
+                          label: const Text('APPROVE', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 11)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            await syncService.rejectReport(meshId);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report Rejected (Deleted)'), backgroundColor: Colors.grey));
+                            }
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.redAccent,
+                            side: const BorderSide(color: Colors.redAccent),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(Icons.close, size: 16),
+                          label: const Text('REJECT', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 11)),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
               ],
             ),
           ),

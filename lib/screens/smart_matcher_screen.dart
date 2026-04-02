@@ -83,7 +83,9 @@ class _SmartMatcherScreenState extends State<SmartMatcherScreen> {
         }
         artificialScores = await AIService.batchComputeHFSkillScores(widget.need, volunteerSentences);
       } else {
-        artificialScores = OfflineMatchingEngine.computeOfflineScores(widget.need, volunteers);
+        double reportLat = (_reportData['latitude'] as num?)?.toDouble() ?? 0.0;
+        double reportLng = (_reportData['longitude'] as num?)?.toDouble() ?? 0.0;
+        artificialScores = OfflineMatchingEngine.computeOfflineScores(widget.need, reportLat, reportLng, volunteers);
       }
 
       // 3. Compute combined scores (HF Skills + Local Distance + Local Vehicle)

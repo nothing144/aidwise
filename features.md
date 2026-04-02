@@ -21,7 +21,7 @@ There are 3 primary roles:
 The Admin Hub is a 3-tab BottomNavigationBar setup:
 - **Tab 1: AI Field Reports (`HeatmapDashboard`)**: A list of *all* problems reported by Field Workers. The UI is categorized by an AI Priority Engine tracking Active Volunteers, Critical Hotspots, and Unprocessed Reports. Selecting a report drills down to the `ReportDetailMapScreen`.
 - **Tab 2: Report Inbox (`AdminReportsTab`)**: A strictly filtered list of *only* problems manually pinned by Admins from the office. Features a **Geocoding Search Bar** allowing Admins to search for a location by typing (e.g., "New Delhi Hospital") and drop a pin.
-- **Tab 3: Mission Control (`AdminMeshInboxScreen`)**: A live-feed inbox that dynamically updates with payload updates received over the offline P2P Mesh.
+- **Tab 3: Mission Control (`AdminMeshInboxScreen`)**: A live-feed triage center that dynamically updates via Mesh. Includes **"Needs Review"** (Gemini < 0.6) and **"Auto-Synced"** (High Confidence) partitions.
 
 ### 2. Field Worker (`AIScannerScreen`)
 - Field workers use the device camera or gallery to capture images of disaster zones or physical paper reports.
@@ -43,15 +43,15 @@ Aidwise V2 is built around an **Offline-First, Resilient Architecture** designed
 
 ### 1. P2P Mesh Network Engine (`OfflineSyncService`)
 The backbone of Aidwise offline capabilities, utilizing the `nearby_connections` protocol to create a self-healing local network via Bluetooth/Wi-Fi Direct.
-*   **Epidemic Routing (Data Muling):** Devices act as nodes. If Volunteer A is deep in a blackout zone and logs a report, they broadcast it locally. If Volunteer B comes into range, Volunteer B caches the payload. When Volunteer B returns to the Admin hub, the payload is delivered.
-*   **Dual-Queue Syncing:** All actions (reports, dispatches, status updates) are queued locally using `SharedPreferences`. The app constantly monitors `hasInternet()`. The moment connectivity is restored, the queue symmetrically flushes to Firebase Firestore.
-*   **Payload Serialization:** Data is structured with unique `_meshId` and `_timestamp` identifiers to prevent infinite loop broadcasting and duplicate Firestore entries.
+*   **Epidemic Routing (Data Muling):** Devices act as nodes. If Volunteer A logs a report offline, they broadcast it. Delivery happens when *any* mule reaches an Admin "Sink" node.
+*   **Idempotent Deduplication:** Uses unique `_meshId` as the Firestore document ID with `merge: true`. This prevents duplicates even if multiple mules sync the same report simultaneously.
+*   **Offline Data Vault (Hive Cache):** Persists the **last 50 Firestore records** locally. If the internet fails, the Data Vault tab fallbacks to this Hive-backed cache with a sync status banner.
 
 ### 2. Edge AI Semantic Matcher (`OfflineMatchingEngine`)
 A completely offline NLP (Natural Language Processing) engine that matches incoming SOS reports to the best available volunteers.
-*   **TF-IDF Vectorization:** The app tokenizes and vectorizes volunteer skills, resources, and vehicle types directly on the device—no external API calls required.
-*   **Cosine Similarity Scoring:** Automatically cross-references the required urgency, resources, and text-descriptions from the Field Report against the mathematical profiles of nearby volunteers, generating a `[0-100%]` Match Purity Score.
-*   **Offline Dispatch Routing:** If the admin dispatches a matched volunteer during a blackout, the engine bypasses Firestore and routes the dispatch payload directly into the P2P Mesh network. 
+*   **TF-IDF Vectorization:** Tokenizes and vectorizes volunteer skills directly on-device.
+*   **Geo-Aware Distance Penalty:** Match scores are mathematically penalized based on the distance between the volunteer and the incident, prioritizing the closest responders.
+*   **Offline Dispatch Routing:** Admins can dispatch volunteers during a blackout; the engine routes the payload directly into the P2P Mesh. 
 
 ### 3. Hardened Mission Lifecycle Tracking
 Closing the loop between admin dispatch and volunteer completion, even entirely offline.

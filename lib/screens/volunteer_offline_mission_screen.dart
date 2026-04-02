@@ -256,6 +256,8 @@ class _VolunteerOfflineMissionScreenState extends State<VolunteerOfflineMissionS
     );
   }
 
+  bool _isPinging = false;
+
   /// Shown when GPS coordinates are missing — volunteer uses text description to navigate
   Widget _buildNoCoordsFallback(String locationText) {
     return Center(
@@ -289,6 +291,39 @@ class _VolunteerOfflineMissionScreenState extends State<VolunteerOfflineMissionS
               ],
             ),
           ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _isPinging ? null : () async {
+                setState(() => _isPinging = true);
+                String meshId = widget.missionData['_meshId'] ?? '';
+                if (meshId.isNotEmpty) {
+                  await OfflineSyncService().sendPingForCoordinatesViaMesh(meshId);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('📡 Ping request sent to Mesh Network. Awaiting automated reply...', style: TextStyle(fontWeight: FontWeight.bold)),
+                      backgroundColor: Colors.blueAccent,
+                      duration: Duration(seconds: 4),
+                    ));
+                  }
+                } else {
+                  setState(() => _isPinging = false);
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Missing Mesh ID for this mission.')));
+                }
+              },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.blueAccent,
+                side: const BorderSide(color: Colors.blueAccent, width: 2),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: _isPinging 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.blueAccent, strokeWidth: 2))
+                : const Icon(Icons.wifi_tethering, size: 20),
+              label: Text(_isPinging ? 'PINGING...' : 'PING TARGET FOR COORDINATES', style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+            ),
+          )
         ],
       ),
     );

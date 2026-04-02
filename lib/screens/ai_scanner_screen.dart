@@ -1,4 +1,6 @@
 import 'dart:typed_data';
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,7 +12,11 @@ import '../services/auth_service.dart';
 import '../services/ai_service.dart';
 import '../services/offline_sync_service.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
 import 'admin_location_picker_screen.dart';
+
+const bool kDebugSkipGates = true;
 
 class AIScannerScreen extends StatefulWidget {
   final bool isAdminMode;
@@ -23,9 +29,15 @@ class AIScannerScreen extends StatefulWidget {
 
 class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  bool _isScanning = false;
-  bool _isExtracting = false;
+  bool _isAnalyzingImage = false;
+  bool _isExtractingText = false;
+  bool _isOrganizing = false;
+  
+  bool _isExtracting = false; // Controls extraction/results panel
   bool _showSuccess = false;
+
+  ImageLabeler? _imageLabeler;
+  TextRecognizer? _textRecognizer;
 
   String _aiUrgency = 'High';
   String _aiType = 'Identified via AI Scanner';
@@ -52,7 +64,6 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
   void _showManualEntryDialog() {
     String selectedUrgency = 'High';
     String selectedResourceType = 'Medical Need';
-    final locationController = TextEditingController();
 
     const List<String> urgencyOptions = ['Low', 'Medium', 'High', 'Critical'];
     const List<String> resourceOptions = [
@@ -173,31 +184,6 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
                       ),
                       const SizedBox(height: 16),
 
-                      // Location Input
-                      Text('LOCATION', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: locationController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: 'e.g. Downtown Camp, Near City Hall',
-                          hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6)),
-                          prefixIcon: Icon(Icons.place, color: AppTheme.primary.withValues(alpha: 0.7), size: 20),
-                          filled: true,
-                          fillColor: AppTheme.surfaceLow,
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: AppTheme.primary.withValues(alpha: 0.3)),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: AppTheme.primary),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
                       // Description
                       Text('DESCRIPTION', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
@@ -266,9 +252,7 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
                                   setState(() {
                                     _aiUrgency = selectedUrgency;
                                     _aiType = selectedResourceType;
-                                    _aiLocation = locationController.text.trim().isNotEmpty
-                                        ? locationController.text.trim()
-                                        : 'Location Logged (GPS)';
+                                    _aiLocation = 'Location Logged (GPS)';
                                     _isExtracting = true;
                                   });
                                 },
@@ -293,125 +277,204 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
+    final options = ImageLabelerOptions(confidenceThreshold: 0.70);
+    _imageLabeler = ImageLabeler(options: options);
+    _textRecognizer = TextRecognizer();
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _imageLabeler?.close();
+    _textRecognizer?.close();
     super.dispose();
   }
 
   void _startScan() async {
-    setState(() {
-      _isScanning = true;
-    });
-    _controller.repeat(reverse: true);
+    if (_imageFile == null) return;
     
-    // Grab input (either manual text or image)
-    Uint8List? imgBytes;
-    if (_imageFile != null) {
-      imgBytes = await _imageFile!.readAsBytes();
-    }
-    String inputForAI = _manualController.text.trim();
+    setState(() {
+      _isExtracting = false;
+      _showSuccess = false;
+    });
 
+    String extractedText = "";
+    List<ImageLabel> labels = [];
+
+    if (kDebugSkipGates) {
+      extractedText = "Test incident report flood area bridge damaged";
+      setState(() => _isOrganizing = true);
+      await _runStage3("text", extractedText, [], File(_imageFile!.path).readAsBytesSync());
+      return;
+    }
+
+    // STAGE 1: Image Labeling
+    setState(() => _isAnalyzingImage = true);
     try {
-      final aiResult = await AIService.analyzeFieldReport(textInput: inputForAI, imageBytes: imgBytes);
-      debugPrint('AI Result: $aiResult');
+      final inputImage = InputImage.fromFilePath(_imageFile!.path);
+      final foundLabels = await _imageLabeler!.processImage(inputImage);
+      
+      const validLabels = [
+        'flood', 'water', 'fire', 'smoke', 'debris', 'rubble', 'damage', 'destruction',
+        'collapsed', 'broken', 'crack', 'injury', 'accident', 'rescue', 'emergency',
+        'building', 'infrastructure', 'road', 'bridge', 'vehicle', 'crowd'
+      ];
+      
+      labels = foundLabels.where((l) => validLabels.contains(l.label.toLowerCase())).toList();
+      
+      if (labels.isEmpty) {
+        setState(() => _isAnalyzingImage = false);
+        _showInvalidImageDialog();
+        return;
+      }
+      labels.sort((a, b) => b.confidence.compareTo(a.confidence));
+      if (labels.length > 3) labels = labels.sublist(0, 3);
+      
+    } catch (e) {
+      debugPrint("Labeling err: $e");
+    } finally {
+      setState(() => _isAnalyzingImage = false);
+    }
+
+    // STAGE 2: OCR Text Extraction
+    setState(() => _isExtractingText = true);
+    try {
+      final inputImage = InputImage.fromFilePath(_imageFile!.path);
+      final recognizedText = await _textRecognizer!.processImage(inputImage);
+      extractedText = recognizedText.text;
+    } catch(e) {
+      debugPrint("OCR err: $e");
+    } finally {
+      setState(() => _isExtractingText = false);
+    }
+
+    // STAGE 3 Evaluation
+    String mode = extractedText.trim().length >= 10 ? "text" : "image_only";
+    
+    setState(() => _isOrganizing = true);
+    await _runStage3(mode, extractedText, labels, File(_imageFile!.path).readAsBytesSync());
+  }
+
+  Future<void> _runStage3(String mode, String text, List<ImageLabel> labels, Uint8List imgBytes) async {
+    try {
+      final model = GenerativeModel(
+        model: 'gemini-2.0-flash',
+        apiKey: "AIzaSyA5zfFBETmHyBQgozYaNT_xkL3tj9PVjlI",
+      );
+
+      String labelsStr = labels.map((l) => "${l.label} (${(l.confidence*100).toStringAsFixed(0)}%)").join(", ");
+      if (labels.isEmpty) labelsStr = "None";
+
+      String prompt = "";
+      List<Part> parts = [];
+      if (mode == "text") {
+        prompt = '''You are an incident report organizer for an NGO disaster coordination app.
+Image analysis detected: [$labelsStr].
+Extracted text from image: [$text]
+Based on both the visual context and text, output ONLY a JSON object:
+{
+  "urgency": "High" | "Medium" | "Low",
+  "type": "string (incident category)",
+  "location": "string (if mentioned in text, else 'Unknown')",
+  "summary": "string (max 2 sentences)",
+  "confidence": number (0.0 to 1.0)
+}
+Output JSON only. No explanation. No markdown.''';
+        parts = [TextPart(prompt)];
+      } else {
+        prompt = '''You are an incident report organizer for an NGO disaster coordination app.
+This image was submitted by a field worker as an incident report.
+Image analysis also detected these labels: [$labelsStr].
+Describe what disaster or problem is visible in this image and output ONLY a JSON object:
+{
+  "urgency": "High" | "Medium" | "Low",
+  "type": "string (incident category)",
+  "location": "Unknown",
+  "summary": "string (max 2 sentences describing what is visually happening)",
+  "confidence": number (0.0 to 1.0)
+}
+Output JSON only. No explanation. No markdown.''';
+        parts = [TextPart(prompt), DataPart('image/jpeg', imgBytes)];
+      }
+
+      final response = await model.generateContent([Content.multi(parts)]);
+      
+      String resText = response.text ?? "{}";
+      resText = resText.replaceAll("```json", "").replaceAll("```", "").trim();
+      final data = json.decode(resText);
+
       if (mounted) {
         setState(() {
-          _aiUrgency = aiResult['urgency'] ?? 'High';
-          _aiType = aiResult['type'] ?? 'Emergency Response';
-          _aiLocation = aiResult['location'] ?? 'Location Logged (GPS)';
+          _aiUrgency = data['urgency'] ?? 'High';
+          _aiType = data['type'] ?? 'Emergency Response';
+          _aiLocation = data['location'] ?? 'Location Logged (GPS)';
+          _isOrganizing = false;
+          _isExtracting = true;
         });
       }
     } catch (e) {
-      debugPrint("AI Service Error: $e");
-    }
-
-    if (mounted) {
-      _controller.stop();
-      
-      // Block API errors — handle differently based on whether user already typed text
-      if (_aiType == 'API_ERROR') {
-        // If user already provided manual text, use fallback defaults and proceed
-        // (avoids infinite loop of re-opening the manual dialog)
-        if (inputForAI.isNotEmpty) {
-          setState(() {
-            _isScanning = false;
-            _aiUrgency = 'High';
-            _aiType = 'Manual Report';
-            _aiLocation = 'Location Logged (GPS)';
-            _isExtracting = true;
-          });
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('⚠️ AI Offline. Proceeding with your manual report.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                backgroundColor: Colors.orange,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-          return;
-        }
-
-        // No text yet (image-only scan failed) — try ML Kit, then open manual entry
+      debugPrint("Gemini Error: $e");
+      _applyUrgencyFallback(labels);
+      if (mounted) {
         setState(() {
-          _isScanning = false;
-          _isExtracting = false;
+          _isOrganizing = false;
+          _isExtracting = true; 
         });
-        
-        // Attempt on-device text extraction from image
-        if (_imageFile != null) {
-          try {
-            final inputImage = InputImage.fromFilePath(_imageFile!.path);
-            final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
-            final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
-            await textRecognizer.close();
-            
-            if (recognizedText.text.isNotEmpty) {
-              _manualController.text = recognizedText.text.trim();
-            }
-          } catch (e) {
-            debugPrint("ML Kit Error: $e");
-          }
-        }
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('⚠️ AI Offline. Extracting text locally & opening Manual Entry.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 4),
-            ),
-          );
-          _showManualEntryDialog();
-        }
-        return;
       }
+    }
+  }
 
-      // Block irrelevant images from proceeding
-      if (_aiType == 'Irrelevant' || _aiUrgency == 'None') {
-        setState(() {
-          _isScanning = false;
-          _isExtracting = false;
-          _showSuccess = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⚠️ AI detected this is NOT an emergency. Please upload a valid incident photo or description.'),
-            backgroundColor: Colors.redAccent,
-            duration: Duration(seconds: 4),
+  void _applyUrgencyFallback(List<ImageLabel> labels) {
+    if (labels.isEmpty) {
+      _aiUrgency = "Low";
+      _aiType = "Unknown Incident";
+      _aiLocation = "Unknown";
+      return;
+    }
+    
+    final lNames = labels.map((l) => l.label.toLowerCase()).toSet();
+    final highTags = {'fire', 'smoke', 'injury', 'accident', 'rescue', 'emergency', 'collapsed', 'rubble'};
+    final medTags = {'flood', 'water', 'damage', 'destruction', 'crack', 'broken', 'crowd'};
+    
+    if (lNames.intersection(highTags).isNotEmpty) {
+      _aiUrgency = "High";
+    } else if (lNames.intersection(medTags).isNotEmpty) {
+      _aiUrgency = "Medium";
+    } else {
+      _aiUrgency = "Low";
+    }
+    
+    _aiType = labels.first.label;
+    _aiLocation = "Unknown";
+  }
+
+  void _showInvalidImageDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Invalid Image', style: TextStyle(color: Colors.white)),
+        content: const Text("This doesn't look like an incident scene. Please retake.", style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() => _imageFile = null);
+            },
+            child: const Text('Retake', style: TextStyle(color: Colors.redAccent)),
           ),
-        );
-        return;
-      }
-      
-      setState(() {
-        _isScanning = false;
-        _isExtracting = true;
-      });
-    }
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() => _isOrganizing = true);
+              _runStage3("image_only", "", [], File(_imageFile!.path).readAsBytesSync());
+            },
+            child: const Text('Submit Anyway', style: TextStyle(color: AppTheme.primary)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _confirmAndDispatch([String? manualText]) async {
@@ -597,11 +660,11 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
               children: [
                 _buildHeader(),
                 const Spacer(),
-                if (_isScanning || (!_isExtracting && !_showSuccess)) _buildScannerOverlay(),
+                if (_isAnalyzingImage || _isExtractingText || _isOrganizing || (!_isExtracting && !_showSuccess)) _buildScannerOverlay(),
                 const Spacer(),
                 if (_isExtracting) _buildExtractionPanel(),
                 if (_showSuccess) _buildSuccessOverlay(),
-                if (!_isScanning && !_isExtracting && !_showSuccess) _buildInputMethods(),
+                if (!_isAnalyzingImage && !_isExtractingText && !_isOrganizing && !_isExtracting && !_showSuccess) _buildInputMethods(),
               ],
             ),
           )
@@ -660,40 +723,29 @@ class _AIScannerScreenState extends State<AIScannerScreen> with SingleTickerProv
   }
 
   Widget _buildScannerOverlay() {
+    bool isProcessing = _isAnalyzingImage || _isExtractingText || _isOrganizing;
+
     return Center(
       child: Container(
         width: 320,
         height: 400,
         decoration: BoxDecoration(
           border: Border.all(
-            color: _isScanning ? AppTheme.primary : AppTheme.primary.withValues(alpha: 0.3), 
-            width: _isScanning ? 2 : 1
+            color: isProcessing ? AppTheme.primary : AppTheme.primary.withValues(alpha: 0.3), 
+            width: isProcessing ? 2 : 1
           ),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: _isScanning 
-          ? AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) {
-                return Stack(
-                  children: [
-                    Positioned(
-                      top: _controller.value * 380,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        height: 3,
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary,
-                          boxShadow: [
-                            BoxShadow(color: AppTheme.primary, blurRadius: 12, spreadRadius: 4)
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
+        child: isProcessing 
+          ? Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(color: AppTheme.primary),
+                const SizedBox(height: 24),
+                if (_isAnalyzingImage) const Text('Analyzing image...', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                if (_isExtractingText) const Text('Extracting text...', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                if (_isOrganizing) const Text('Organizing report...', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              ],
             )
           : Center(
               child: Text('FRAME THE REPORT', style: TextStyle(

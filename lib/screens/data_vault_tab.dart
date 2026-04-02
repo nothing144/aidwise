@@ -13,6 +13,24 @@ class DataVaultTab extends StatefulWidget {
 class _DataVaultTabState extends State<DataVaultTab> {
   String _searchQuery = '';
   String _filterType = 'All';
+  bool _isOffline = false;
+  DateTime? _lastSyncTime;
+  List<Map<String, dynamic>> _cachedReports = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _checkInitialConnectivity();
+  }
+
+  Future<void> _checkInitialConnectivity() async {
+    bool online = await OfflineSyncService.hasInternet();
+    _lastSyncTime = await OfflineSyncService().getLastVaultSyncTime();
+    if (!online) {
+      _cachedReports = await OfflineSyncService().getCachedVaultReports();
+    }
+    if (mounted) setState(() => _isOffline = online == false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,6 +38,25 @@ class _DataVaultTabState extends State<DataVaultTab> {
       backgroundColor: AppTheme.background,
       body: Column(
         children: [
+          // Connectivity Banner
+          if (_isOffline)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 20),
+              color: Colors.orange.withValues(alpha: 0.2),
+              child: Row(
+                children: [
+                  const Icon(Icons.cloud_off, color: Colors.orange, size: 14),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'OFFLINE MODE: Serving cached data from ${_lastSyncTime != null ? _formatTimeAgo(_lastSyncTime!) : "unknown time"}',
+                      style: const TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Header
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
@@ -119,44 +156,53 @@ class _DataVaultTabState extends State<DataVaultTab> {
           ),
           const SizedBox(height: 12),
           // Data List
-          Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('reports')
                   .orderBy('timestamp', descending: true)
+                  .limit(100)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                List<Map<String, dynamic>> displayData = [];
+
+                if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+                  // ONLINE STATE
+                  displayData = snapshot.data!.docs.map((d) => d.data() as Map<String, dynamic>).toList();
+                  // Update cache in background
+                  if (displayData.isNotEmpty) {
+                    OfflineSyncService().cacheVaultReports(displayData.take(50).toList());
+                  }
+                } else if (snapshot.connectionState == ConnectionState.active || snapshot.hasError || _isOffline) {
+                  // OFFLINE FALLBACK
+                  displayData = _cachedReports;
+                } else {
                   return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
                 }
-
-                var docs = snapshot.data?.docs ?? [];
                 
-                // Apply filters
-                if (_filterType != 'All') {
-                  docs = docs.where((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
+                // Apply Search & Filter to displayData
+                var filtered = displayData.where((data) {
+                  // Filter Type
+                  if (_filterType != 'All') {
                     String type = (data['type'] ?? '').toString().toLowerCase();
-                    return type.contains(_filterType.toLowerCase());
-                  }).toList();
-                }
-
-                if (_searchQuery.isNotEmpty) {
-                  docs = docs.where((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
+                    if (!type.contains(_filterType.toLowerCase())) return false;
+                  }
+                  // Search Query
+                  if (_searchQuery.isNotEmpty) {
                     String all = '${data['type'] ?? ''} ${data['description'] ?? ''} ${data['location'] ?? ''} ${data['submittedBy'] ?? ''}'.toLowerCase();
-                    return all.contains(_searchQuery);
-                  }).toList();
-                }
+                    if (!all.contains(_searchQuery)) return false;
+                  }
+                  return true;
+                }).toList();
 
-                if (docs.isEmpty) {
+                if (filtered.isEmpty) {
                   return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.folder_open, color: AppTheme.textSecondary, size: 48),
                         const SizedBox(height: 12),
-                        Text('No data records found.', style: TextStyle(color: AppTheme.textSecondary)),
+                        Text(displayData.isEmpty ? 'Vault is empty.' : 'No matches found.', 
+                          style: TextStyle(color: AppTheme.textSecondary)),
                       ],
                     ),
                   );
@@ -164,9 +210,9 @@ class _DataVaultTabState extends State<DataVaultTab> {
 
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: docs.length,
+                  itemCount: filtered.length,
                   itemBuilder: (context, index) {
-                    final data = docs[index].data() as Map<String, dynamic>;
+                    final data = filtered[index];
                     return _buildDataCard(data, index + 1);
                   },
                 );
@@ -178,6 +224,14 @@ class _DataVaultTabState extends State<DataVaultTab> {
     );
   }
 
+  String _formatTimeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
   Widget _buildDataCard(Map<String, dynamic> data, int serial) {
     String type = data['type'] ?? 'Unknown';
     String urgency = data['urgency'] ?? 'Medium';
@@ -186,9 +240,18 @@ class _DataVaultTabState extends State<DataVaultTab> {
     String submitter = data['submittedBy'] ?? 'Anonymous';
     String source = data['source'] ?? 'Field Worker';
     Timestamp? ts = data['timestamp'];
-    String dateStr = ts != null 
-        ? '${ts.toDate().day}/${ts.toDate().month}/${ts.toDate().year} ${ts.toDate().hour}:${ts.toDate().minute.toString().padLeft(2, '0')}'
-        : 'N/A';
+    String dateStr = '';
+    if (ts != null) {
+       dateStr = '${ts.toDate().day}/${ts.toDate().month}/${ts.toDate().year} ${ts.toDate().hour}:${ts.toDate().minute.toString().padLeft(2, '0')}';
+    } else if (data['timestamp'] is String) {
+       // Hive Cache fallback (ISO String)
+       try {
+         final dt = DateTime.parse(data['timestamp']);
+         dateStr = '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+       } catch(_) { dateStr = 'N/A'; }
+    } else {
+       dateStr = 'N/A';
+    }
 
     Color urgencyColor = urgency == 'Critical' || urgency == 'High'
         ? AppTheme.urgencyHigh
